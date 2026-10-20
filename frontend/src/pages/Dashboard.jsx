@@ -17,10 +17,11 @@ import {
   WifiOff,
   Bell,
   BellRing,
+  RotateCcw,
 } from 'lucide-react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
-import { Loading, Octo, Ring, StatChip, TopicBadge, TYPE_LABEL, localize, useOnlineStatus } from '../components.jsx';
+import { Loading, Octo, Ring, StatChip, TopicBadge, TYPE_LABEL, localize, useOnlineStatus, AnnouncementsFeed } from '../components.jsx';
 import {
   getNotificationStatus,
   requestNotificationPermission,
@@ -46,10 +47,17 @@ export default function Dashboard() {
       .catch((e) => setErr(e.message));
   }, [setUser]);
 
+  const [taskFilter, setTaskFilter] = useState('all'); // 'all' | 'todo' | 'practice'
   const tasks = data?.tasks || [];
   const summary = data?.summary || { done: 0, pending: 0, total: 0, doneToday: 0, totalToday: 0 };
   const u = data?.user || { name: 'Learner', streak: 0, xp: 0, level: 1, xpIntoLevel: 0, badges: [] };
   const allDone = summary.pending === 0;
+
+  const filteredTasks = tasks.filter((t) => {
+    if (taskFilter === 'todo') return !t.done;
+    if (taskFilter === 'practice') return t.done;
+    return true;
+  });
 
   useEffect(() => {
     if (data && summary.pending > 0) {
@@ -181,6 +189,9 @@ export default function Dashboard() {
           <Ring value={summary.doneToday} max={Math.max(summary.totalToday, 1)} label="today" size={88} />
         </div>
       </motion.section>
+
+      {/* Classroom Announcements Feed */}
+      <AnnouncementsFeed />
 
       {/* Engagement Nudge / Streak at Risk Card */}
       <motion.section
@@ -373,8 +384,8 @@ export default function Dashboard() {
         </section>
       )}
 
-      {/* Big Quest CTA Button */}
-      {!allDone && (
+      {/* Big Quest CTA Button / Practice Mode Button */}
+      {!allDone ? (
         <div className="text-center pt-1">
           <Link
             to="/quest"
@@ -385,15 +396,61 @@ export default function Dashboard() {
             <ArrowRight size={18} />
           </Link>
         </div>
-      )}
+      ) : tasks.length > 0 ? (
+        <div className="text-center pt-1">
+          <Link
+            to="/quest?mode=practice"
+            className="btn btn-outline w-full sm:w-auto sm:px-10 text-sm sm:text-base font-black inline-flex items-center justify-center gap-2 border-brand-400 text-brand-700 hover:bg-brand-50 dark:border-brand-500 dark:text-brand-300 dark:hover:bg-slate-800 shadow-xs"
+          >
+            <RotateCcw size={18} />
+            <span>Enter Practice Mode (Replay Completed Tasks)</span>
+          </Link>
+        </div>
+      ) : null}
 
       {/* Tasks List */}
       <section className="space-y-3 pt-1">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100">Today's Tasks</h2>
-          <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400">
-            {summary.doneToday} of {summary.totalToday} completed
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-slate-100">Today's Tasks</h2>
+            <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400">
+              {summary.doneToday} of {summary.totalToday} completed
+            </span>
+          </div>
+
+          {/* Filter Pills */}
+          <div className="flex items-center gap-1 rounded-xl bg-slate-100 p-1 dark:bg-slate-800 text-xs font-black">
+            <button
+              onClick={() => setTaskFilter('all')}
+              className={`rounded-lg px-2.5 py-1 transition cursor-pointer ${
+                taskFilter === 'all'
+                  ? 'bg-white text-brand-700 shadow-2xs dark:bg-black dark:text-brand-300'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+              }`}
+            >
+              All ({tasks.length})
+            </button>
+            <button
+              onClick={() => setTaskFilter('todo')}
+              className={`rounded-lg px-2.5 py-1 transition cursor-pointer ${
+                taskFilter === 'todo'
+                  ? 'bg-white text-brand-700 shadow-2xs dark:bg-black dark:text-brand-300'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+              }`}
+            >
+              To Do ({summary.pending})
+            </button>
+            <button
+              onClick={() => setTaskFilter('practice')}
+              className={`rounded-lg px-2.5 py-1 transition cursor-pointer ${
+                taskFilter === 'practice'
+                  ? 'bg-white text-brand-700 shadow-2xs dark:bg-black dark:text-brand-300'
+                  : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
+              }`}
+            >
+              Practice ({tasks.filter((t) => t.done).length})
+            </button>
+          </div>
         </div>
 
         {tasks.length === 0 && (
@@ -402,14 +459,20 @@ export default function Dashboard() {
           </p>
         )}
 
+        {tasks.length > 0 && filteredTasks.length === 0 && (
+          <p className="card p-4 text-center font-bold text-slate-500 dark:text-slate-400 dark:bg-slate-800 dark:border-slate-700">
+            No tasks match this filter.
+          </p>
+        )}
+
         <div className="grid gap-2.5 sm:grid-cols-2">
-          {tasks.map((raw) => {
+          {filteredTasks.map((raw) => {
             const t = localize(raw, lang);
             return (
               <div
                 key={t.id}
                 className={`card flex items-center gap-3 p-3 sm:p-3.5 transition hover:border-brand-300 dark:hover:border-brand-400 ${
-                  t.done ? 'bg-slate-50/80 opacity-75 dark:bg-slate-800/50 dark:border-slate-800' : 'bg-white dark:bg-slate-800 dark:border-slate-700'
+                  t.done ? 'bg-slate-50/80 opacity-90 dark:bg-slate-800/50 dark:border-slate-800' : 'bg-white dark:bg-slate-800 dark:border-slate-700'
                 }`}
               >
                 <TopicBadge topic={t.topic} size="md" />
@@ -421,18 +484,28 @@ export default function Dashboard() {
                   </p>
                 </div>
 
-                <div className="shrink-0">
+                <div className="shrink-0 flex items-center gap-1.5">
                   {t.done ? (
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-xl px-2.5 py-1 text-xs font-black ${
-                        t.result.correct
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border dark:border-emerald-800/60'
-                          : 'bg-rose-100 text-rose-600 dark:bg-rose-950/70 dark:text-rose-300 dark:border dark:border-rose-800/60'
-                      }`}
-                    >
-                      <CheckCircle2 size={13} />
-                      {t.result.correct ? 'Done' : 'Tried'}
-                    </span>
+                    <>
+                      <Link
+                        to={`/quest?practiceId=${t.id}`}
+                        className="inline-flex items-center gap-1 rounded-xl border border-brand-200 bg-brand-50/80 px-2 py-1 text-xs font-black text-brand-700 hover:bg-brand-100 dark:border-brand-700/80 dark:bg-brand-950/70 dark:text-brand-300 dark:hover:bg-brand-900/60 transition shadow-2xs"
+                        title="Practice this task (no XP at risk)"
+                      >
+                        <RotateCcw size={11} />
+                        <span>Practice</span>
+                      </Link>
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-xl px-2.5 py-1 text-xs font-black ${
+                          t.result?.correct
+                            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border dark:border-emerald-800/60'
+                            : 'bg-rose-100 text-rose-600 dark:bg-rose-950/70 dark:text-rose-300 dark:border dark:border-rose-800/60'
+                        }`}
+                      >
+                        <CheckCircle2 size={13} />
+                        {t.result?.correct ? 'Done' : 'Tried'}
+                      </span>
+                    </>
                   ) : (
                     <span className="inline-flex items-center gap-1 rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 dark:border dark:border-amber-800/60 px-2.5 py-1 text-xs font-black">
                       <Zap size={12} className="fill-amber-500 text-amber-600 dark:text-amber-400" />

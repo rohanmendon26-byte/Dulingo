@@ -91,4 +91,128 @@ router.post('/tasks/:id/submit', requireAuth, requireRole('student'), wrap(async
   });
 }));
 
+/**
+ * POST /tasks/:id/practice
+ * Redo a completed or ongoing task in Practice Mode (No duplicate XP, safe practice)
+ */
+router.post('/tasks/:id/practice', requireAuth, requireRole('student'), wrap(async (req, res) => {
+  const task = await Task.findById(req.params.id);
+  if (!task) return res.status(404).json({ error: 'Task not found' });
+
+  const answer = String(req.body.answer || '').trim();
+  if (!answer) return res.status(400).json({ error: 'Please provide an answer' });
+
+  let correct, needsReview = false, fieldResults = null;
+  if (task.type === 'mock_form') {
+    let values;
+    try { values = JSON.parse(answer); } catch { values = null; }
+    if (!Array.isArray(values) || values.length !== task.fields.length || values.some((v) => !String(v).trim()))
+      return res.status(400).json({ error: 'Please fill every box in the form' });
+    fieldResults = task.fields.map((f, i) => ({ ok: matches(f.answer, values[i]), expected: String(f.answer).split('|')[0] }));
+    const right = fieldResults.filter((r) => r.ok).length;
+    correct = right === fieldResults.length;
+  } else if (task.type === 'essay') {
+    if (answer.split(/\s+/).length < 15) return res.status(400).json({ error: 'Please write at least 15 words' });
+    correct = true; needsReview = true;
+  } else {
+    correct = isCorrect(task, answer);
+  }
+
+  // Generate smart learning hint if incorrect
+  let hint = '';
+  if (!correct) {
+    if (task.type === 'mock_form' && fieldResults) {
+      const wrongIdx = fieldResults.findIndex((r) => !r.ok);
+      if (wrongIdx !== -1 && task.fields[wrongIdx]?.hint) {
+        hint = `Hint for ${task.fields[wrongIdx].label}: ${task.fields[wrongIdx].hint}`;
+      } else {
+        hint = 'Tip: Carefully verify formatting and spelling in each field.';
+      }
+    } else if (task.answer) {
+      const cleanExpected = task.answer.split('|')[0].trim();
+      hint = `Hint: Starts with "${cleanExpected.slice(0, 2)}" (${cleanExpected.length} letters). Topic: ${task.topic}.`;
+    }
+  }
+
+  res.json({
+    correct,
+    isPractice: true,
+    needsReview,
+    xpEarned: 0,
+    fieldResults,
+    hint,
+    explanation: task.explanation,
+    correctAnswer: ['essay', 'mock_form'].includes(task.type) ? null : task.answer.split('|')[0],
+    message: correct
+      ? 'Well done! Practice makes perfect.'
+      : 'Keep practicing! Review the explanation below and try again.',
+  });
+}));
+
+/**
+ * POST /tasks/sync-offline
+ * Bulk sync queued answers when student re-establishes connectivity
+ */
+router.post('/tasks/sync-offline', requireAuth, requireRole('student'), wrap(async (req, res) => {
+  const items = Array.isArray(req.body.items) ? req.body.items : [];
+  if (items.length === 0) {
+    return res.json({ syncedCount: 0, totalProcessed: 0, user: publicUser(req.user) });
+  }
+
+  let syncedCount = 0;
+  let totalNewXp = 0;
+  const levelBefore = levelFor(req.user.xp);
+
+  for (const item of items) {
+    const taskId = item.taskId || (typeof item.url === 'string' ? item.url.replace('/tasks/', '').replace('/submit', '') : null);
+    if (!taskId) continue;
+
+    const task = await Task.findById(taskId);
+    if (!task) continue;
+
+    // If submission already exists from a prior sync, treat as succeeded
+    const existing = await Submission.findOne({ user: req.user._id, task: task._id });
+    if (existing) {
+      syncedCount++;
+      continue;
+    }
+
+    const answer = String(item.answer || item.body?.answer || '').trim();
+    if (!answer) continue;
+
+    let correct, needsReview = false, xpEarned, fieldResults = null;
+    if (task.type === 'mock_form') {
+      let values;
+      try { values = JSON.parse(answer); } catch { values = null; }
+      if (Array.isArray(values)) {
+        fieldResults = task.fields.map((f, i) => ({ ok: matches(f.answer, values[i]), expected: String(f.answer).split('|')[0] }));
+        const right = fieldResults.filter((r) => r.ok).length;
+        correct = right === fieldResults.length;
+        xpEarned = correct ? task.xp : Math.max(2, Math.round((task.xp * right) / fieldResults.length));
+      } else {
+        correct = false;
+        xpEarned = 2;
+      }
+    } else if (task.type === 'essay') {
+      correct = true; needsReview = true; xpEarned = task.xp;
+    } else {
+      correct = isCorrect(task, answer);
+      xpEarned = correct ? task.xp : 2;
+    }
+
+    await Submission.create({ user: req.user._id, task: task._id, answer, correct, needsReview, xpEarned });
+    await award(req.user, xpEarned, `task:${task.title}`);
+    totalNewXp += xpEarned;
+    syncedCount++;
+  }
+
+  res.json({
+    syncedCount,
+    totalProcessed: items.length,
+    newXp: totalNewXp,
+    leveledUp: levelFor(req.user.xp) > levelBefore,
+    user: publicUser(req.user),
+  });
+}));
+
 export default router;

@@ -6,6 +6,8 @@ export { SpeakerButton, MicButton } from './AudioButtons.jsx';
 export { StatChip } from './StatChip.jsx';
 export { Loading } from './Loading.jsx';
 export { Shell } from './Shell.jsx';
+export { AnnouncementsFeed } from './AnnouncementsFeed.jsx';
+export { OfflineSyncBanner } from './OfflineSyncBanner.jsx';
 
 // Re-export constants and hooks for convenience and backward compatibility
 export { LANGS, TOPIC_ICONS, TYPE_LABEL, localize } from '../constants/index.js';

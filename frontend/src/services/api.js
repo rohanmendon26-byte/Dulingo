@@ -24,7 +24,13 @@ export const enqueueOfflineAction = (item) => {
   const queue = getOfflineQueue();
   queue.push({ ...item, queuedAt: Date.now() });
   localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('dulingo_offline_queued', { detail: { count: queue.length, item } }));
+  }
 };
+
+/** Helper to get count of pending offline actions */
+export const getOfflineQueueCount = () => getOfflineQueue().length;
 
 /** Helper to clear offline queue */
 export const clearOfflineQueue = () => {
@@ -221,10 +227,56 @@ export async function syncOfflineQueue() {
   const queue = getOfflineQueue();
   if (!queue || queue.length === 0) return { synced: 0 };
 
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('dulingo_syncing', { detail: { count: queue.length } }));
+  }
+
+  // Attempt batch sync first
+  try {
+    const res = await fetch(`${BASE}/api/tasks/sync-offline`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
+      },
+      body: JSON.stringify({ items: queue }),
+    });
+
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      clearOfflineQueue();
+
+      // Refresh cached tasks and user
+      try {
+        const updated = await api('/tasks/today');
+        localStorage.setItem(CACHE_TASKS_KEY, JSON.stringify(updated));
+        if (data.user) {
+          localStorage.setItem(CACHE_USER_KEY, JSON.stringify(data.user));
+        }
+      } catch {}
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(
+          new CustomEvent('dulingo_synced', {
+            detail: { synced: data.syncedCount || queue.length, newXp: data.newXp || 0, user: data.user },
+          })
+        );
+      }
+
+      return { synced: data.syncedCount || queue.length, newXp: data.newXp || 0, user: data.user };
+    }
+  } catch (err) {
+    console.warn('Batch sync offline failed, falling back to sequential item sync:', err);
+  }
+
+  // Fallback: sequential sync keeping track of successfully synced items
   let synced = 0;
-  for (const item of queue) {
+  const remaining = [];
+
+  for (let i = 0; i < queue.length; i++) {
+    const item = queue[i];
     try {
-      await fetch(`${BASE}/api${item.url}`, {
+      const res = await fetch(`${BASE}/api${item.url}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -232,27 +284,35 @@ export async function syncOfflineQueue() {
         },
         body: item.body ? JSON.stringify(item.body) : undefined,
       });
-      synced++;
+      if (res.ok || res.status === 409) {
+        // 409 means already completed, so count as synced
+        synced++;
+      } else {
+        remaining.push(item);
+      }
     } catch {
-      // Stop and retry later if network still spotty
+      // Network drop: save this item and all remaining unattempted items
+      remaining.push(...queue.slice(i));
       break;
     }
   }
 
-  // Clear completed actions
-  clearOfflineQueue();
+  if (remaining.length === 0) {
+    clearOfflineQueue();
+  } else {
+    localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(remaining));
+  }
 
-  // Refresh today's tasks cache after sync
   try {
     const updated = await api('/tasks/today');
     localStorage.setItem(CACHE_TASKS_KEY, JSON.stringify(updated));
   } catch {}
 
   if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent('dulingo_synced', { detail: { synced } }));
+    window.dispatchEvent(new CustomEvent('dulingo_synced', { detail: { synced, remaining: remaining.length } }));
   }
 
-  return { synced };
+  return { synced, remaining: remaining.length };
 }
 
 // Auto-sync when internet connectivity is re-established

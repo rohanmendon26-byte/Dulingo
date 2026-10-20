@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   X,
@@ -16,6 +16,7 @@ import {
   Mic,
   Square,
   WifiOff,
+  RotateCcw,
 } from 'lucide-react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
@@ -24,6 +25,11 @@ import { useSpeech, useSpeechRecognition } from '../speech.js';
 
 export default function Quest() {
   const { setUser, lang } = useAuth();
+  const [searchParams] = useSearchParams();
+  const practiceId = searchParams.get('practiceId');
+  const modeParam = searchParams.get('mode');
+  const isPractice = modeParam === 'practice' || Boolean(practiceId);
+
   const [tasks, setTasks] = useState(null);
   const [i, setI] = useState(0);
   const [answer, setAnswer] = useState('');
@@ -36,14 +42,26 @@ export default function Quest() {
   const [celebrate, setCelebrate] = useState(false);
   const [badges, setBadges] = useState([]);
   const [activeMicField, setActiveMicField] = useState(null);
+  const [showHint, setShowHint] = useState(false);
   const speech = useSpeech(lang);
   const mic = useSpeechRecognition(lang);
 
   useEffect(() => {
     api('/tasks/today')
-      .then((d) => setTasks(d.tasks.filter((t) => !t.done)))
+      .then((d) => {
+        const all = d.tasks || [];
+        if (practiceId) {
+          const match = all.find((t) => String(t.id) === String(practiceId));
+          setTasks(match ? [match] : all);
+        } else if (modeParam === 'practice') {
+          const completed = all.filter((t) => t.done);
+          setTasks(completed.length > 0 ? completed : all);
+        } else {
+          setTasks(all.filter((t) => !t.done));
+        }
+      })
       .catch((e) => setErr(e.message));
-  }, []);
+  }, [practiceId, modeParam]);
 
   const rawTask = tasks?.[i];
   const task = rawTask && localize(rawTask, lang);
@@ -57,6 +75,7 @@ export default function Quest() {
     speech.stop();
     mic.stopListening();
     setActiveMicField(null);
+    setShowHint(false);
   }, [i]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = async () => {
@@ -65,15 +84,18 @@ export default function Quest() {
     speech.stop();
     mic.stopListening();
     try {
-      const r = await api(`/tasks/${rawTask.id}/submit`, {
+      const endpoint = isPractice ? `/tasks/${rawTask.id}/practice` : `/tasks/${rawTask.id}/submit`;
+      const r = await api(endpoint, {
         method: 'POST',
         body: { answer: rawTask.type === 'mock_form' ? JSON.stringify(formVals) : answer },
       });
       setResult(r);
-      setUser(r.user);
-      setEarned((e) => e + r.xpEarned);
+      if (!isPractice && r.user) {
+        setUser(r.user);
+        setEarned((e) => e + r.xpEarned);
+        if (r.newBadges?.length) setBadges((b) => [...b, ...r.newBadges]);
+      }
       if (r.correct) setCorrectCount((c) => c + 1);
-      if (r.newBadges?.length) setBadges((b) => [...b, ...r.newBadges]);
       if (r.correct) {
         setCelebrate(true);
         setTimeout(() => setCelebrate(false), 2200);
@@ -90,6 +112,7 @@ export default function Quest() {
     setAnswer('');
     setResult(null);
     setErr('');
+    setShowHint(false);
     mic.stopListening();
     setActiveMicField(null);
   };
@@ -104,17 +127,29 @@ export default function Quest() {
         <motion.div initial={{ scale: 0.7 }} animate={{ scale: 1 }} className="flex justify-center">
           <Octo size={140} />
         </motion.div>
-        <h1 className="text-2xl sm:text-3xl font-black text-slate-900">
-          {tasks.length === 0 ? 'All caught up!' : 'Quest Complete!'}
+        <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100">
+          {isPractice
+            ? 'Practice Complete!'
+            : tasks.length === 0
+            ? 'All caught up!'
+            : 'Quest Complete!'}
         </h1>
+        <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
+          {isPractice
+            ? 'Great repetition! Revisiting lessons reinforces memory.'
+            : tasks.length === 0
+            ? 'You completed all your daily tasks! You can practice completed tasks anytime.'
+            : 'Outstanding work on today’s civic challenges!'}
+        </p>
+
         {tasks.length > 0 && (
-          <div className="card grid grid-cols-2 gap-2.5 p-4 text-base sm:text-lg font-black">
-            <div className="flex items-center justify-center gap-2 rounded-xl bg-amber-50 p-2.5 text-amber-700">
+          <div className="card grid grid-cols-2 gap-2.5 p-4 text-base sm:text-lg font-black dark:border-slate-700 dark:bg-black">
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-amber-50 p-2.5 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
               <Zap size={18} className="fill-amber-500 text-amber-500" />
-              <span>+{earned} XP</span>
+              <span>{isPractice ? '+0 XP (Practice)' : `+${earned} XP`}</span>
             </div>
-            <div className="flex items-center justify-center gap-2 rounded-xl bg-emerald-50 p-2.5 text-emerald-700">
-              <CheckCircle2 size={18} className="text-emerald-600" />
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-emerald-50 p-2.5 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+              <CheckCircle2 size={18} className="text-emerald-600 dark:text-emerald-400" />
               <span>{correctCount}/{tasks.length} right</span>
             </div>
           </div>
@@ -122,13 +157,22 @@ export default function Quest() {
         {badges.map((b) => (
           <p
             key={b.id}
-            className="flex items-center justify-center gap-2 rounded-xl bg-amber-100 p-3 font-black text-amber-800 text-sm"
+            className="flex items-center justify-center gap-2 rounded-xl bg-amber-100 p-3 font-black text-amber-800 text-sm dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
           >
             <Award size={18} className="text-amber-600 shrink-0" />
             <span>New badge unlocked: {b.label}</span>
           </p>
         ))}
         <div className="flex flex-col gap-2 pt-2">
+          {tasks.length === 0 && !isPractice && (
+            <Link
+              to="/quest?mode=practice"
+              className="btn btn-outline text-sm sm:text-base border-brand-400 text-brand-700 hover:bg-brand-50 dark:border-brand-500 dark:text-brand-300 dark:hover:bg-slate-800"
+            >
+              <RotateCcw size={18} />
+              <span>Practice Completed Tasks</span>
+            </Link>
+          )}
           <Link to="/stories" className="btn btn-primary text-sm sm:text-base">
             <BookOpen size={18} />
             <span>Read a Story for Bonus XP</span>
@@ -157,17 +201,33 @@ export default function Quest() {
     <div className="mx-auto max-w-2xl pb-64 sm:pb-52">
       <Confetti show={celebrate} />
 
+      {/* Practice Mode Alert Header Banner */}
+      {isPractice && (
+        <div className="mb-3 flex items-center justify-between gap-2 rounded-xl border border-purple-300 bg-purple-50/90 px-3 py-1.5 text-xs font-black text-purple-900 dark:border-purple-800 dark:bg-purple-950/70 dark:text-purple-300 shadow-2xs">
+          <span className="flex items-center gap-1.5">
+            <RotateCcw size={13} className="text-purple-600 dark:text-purple-400" />
+            <span>Practice Mode: Replay lessons for mastery (+0 XP)</span>
+          </span>
+          <Link
+            to="/dashboard"
+            className="text-[11px] font-bold text-purple-700 dark:text-purple-300 underline hover:opacity-80"
+          >
+            Exit
+          </Link>
+        </div>
+      )}
+
       {/* Sleek top quest header bar */}
       <div className="mb-4 sm:mb-6 flex items-center gap-3">
         <Link
           to="/dashboard"
           aria-label="Quit quest"
-          className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 transition"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-500 hover:bg-slate-200 transition dark:bg-slate-800 dark:text-slate-400 dark:hover:bg-slate-700"
         >
           <X size={18} className="stroke-[2.5]" />
         </Link>
         <div
-          className="h-3 sm:h-3.5 flex-1 overflow-hidden rounded-full bg-slate-200/80"
+          className="h-3 sm:h-3.5 flex-1 overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-800"
           role="progressbar"
           aria-valuenow={i}
           aria-valuemax={tasks.length}
@@ -178,7 +238,7 @@ export default function Quest() {
             transition={{ duration: 0.4 }}
           />
         </div>
-        <span className="font-black text-xs sm:text-sm text-slate-500 shrink-0">
+        <span className="font-black text-xs sm:text-sm text-slate-500 dark:text-slate-400 shrink-0">
           {i + 1}/{tasks.length}
         </span>
       </div>
@@ -191,17 +251,53 @@ export default function Quest() {
           exit={{ x: -30, opacity: 0 }}
           className="space-y-4"
         >
-          {/* Topic & Type Badge */}
-          <div className="flex items-center gap-2">
-            <TopicBadge topic={task.topic} size="sm" />
-            <span className="text-xs font-black uppercase tracking-wider text-brand-700">
-              {task.topic} · {TYPE_LABEL[task.type]}
-            </span>
+          {/* Topic & Type Badge + Hint Trigger */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <TopicBadge topic={task.topic} size="sm" />
+              <span className="text-xs font-black uppercase tracking-wider text-brand-700 dark:text-brand-300">
+                {task.topic} · {TYPE_LABEL[task.type]}
+              </span>
+            </div>
+
+            {!result && (
+              <button
+                type="button"
+                onClick={() => setShowHint(!showHint)}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-black text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800 transition cursor-pointer"
+                title="Get a helpful hint"
+              >
+                <Lightbulb size={12} className={showHint ? 'fill-amber-500' : ''} />
+                <span>{showHint ? 'Hide Hint' : 'Hint'}</span>
+              </button>
+            )}
           </div>
 
-          <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 leading-snug">
+          <h1 className="text-xl sm:text-2xl md:text-3xl font-black text-slate-900 dark:text-slate-100 leading-snug">
             {task.title}
           </h1>
+
+          {/* Collapsible Smart Hint Box */}
+          {showHint && !result && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="rounded-xl border border-amber-300 bg-amber-50/90 p-3 text-xs sm:text-sm font-semibold text-amber-900 dark:border-amber-700/80 dark:bg-amber-950/70 dark:text-amber-200 space-y-1 shadow-2xs"
+            >
+              <div className="flex items-center gap-1.5 font-black text-xs uppercase tracking-wide text-amber-800 dark:text-amber-300">
+                <Lightbulb size={13} className="fill-amber-500 text-amber-600" />
+                <span>Civic Learning Hint</span>
+              </div>
+              <p>
+                {task.type === 'mock_form'
+                  ? 'Fill out all fields carefully according to standard Indian government identity and service document guidelines.'
+                  : task.type === 'essay'
+                  ? 'Write at least 15 words explaining the procedure or concept clearly step by step.'
+                  : `Focus on the exact key terminology used in official ${task.topic} procedures.`}
+              </p>
+            </motion.div>
+          )}
 
           {/* Question Text */}
           <div className="rounded-2xl border border-slate-200/90 bg-white dark:bg-slate-900 dark:border-slate-700/80 p-4 text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 leading-relaxed shadow-xs">
@@ -495,9 +591,15 @@ export default function Quest() {
                         <WifiOff size={11} className="text-amber-700 dark:text-amber-400" /> Offline
                       </span>
                     )}
-                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-300 dark:bg-amber-950/60 dark:border-amber-700 dark:text-amber-300 px-2.5 py-0.5 text-xs font-black text-amber-900 shadow-2xs">
-                      <Zap size={13} className="fill-amber-500 text-amber-600 dark:text-amber-400" /> +{result.xpEarned} XP
-                    </span>
+                    {isPractice ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-purple-100 border border-purple-300 dark:bg-purple-950/60 dark:border-purple-700 dark:text-purple-300 px-2.5 py-0.5 text-xs font-black text-purple-900 shadow-2xs">
+                        <RotateCcw size={12} className="text-purple-600 dark:text-purple-400" /> Practice
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 border border-amber-300 dark:bg-amber-950/60 dark:border-amber-700 dark:text-amber-300 px-2.5 py-0.5 text-xs font-black text-amber-900 shadow-2xs">
+                        <Zap size={13} className="fill-amber-500 text-amber-600 dark:text-amber-400" /> +{result.xpEarned} XP
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -509,6 +611,17 @@ export default function Quest() {
                     <span className="font-extrabold text-slate-900 dark:text-slate-100 text-sm sm:text-base">
                       {task.options?.[opts.indexOf(result.correctAnswer)] || result.correctAnswer}
                     </span>
+                  </div>
+                )}
+
+                {result.hint && !result.correct && (
+                  <div className="rounded-xl bg-amber-50/90 dark:bg-amber-950/70 p-2.5 sm:p-3 border border-amber-300 dark:border-amber-700/80 text-xs sm:text-sm shadow-2xs">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-amber-800 dark:text-amber-300 block mb-0.5">
+                      Practice Hint:
+                    </span>
+                    <p className="font-semibold text-amber-900 dark:text-amber-200">
+                      {result.hint}
+                    </p>
                   </div>
                 )}
 

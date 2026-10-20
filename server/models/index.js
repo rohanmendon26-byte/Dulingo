@@ -3,3 +3,5 @@ export { Task } from './Task.js';
 export { Submission } from './Submission.js';
 export { Story } from './Story.js';
 export { XpLog } from './XpLog.js';
+export { Announcement } from './Announcement.js';
+

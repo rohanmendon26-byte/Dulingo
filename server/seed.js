@@ -1,12 +1,12 @@
 import 'dotenv/config';
 import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
-import { User, Task, Submission, Story, XpLog } from './models.js';
+import { User, Task, Submission, Story, XpLog, Announcement } from './models.js';
 import { todayIST } from './game.js';
 import { TASK_TR, STORY_TR } from './translations.js';
 
 await mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/dulingo');
-await Promise.all([User, Task, Submission, Story, XpLog].map((m) => m.deleteMany({})));
+await Promise.all([User, Task, Submission, Story, XpLog, Announcement].map((m) => m.deleteMany({})));
 
 const hash = await bcrypt.hash('demo1234', 10);
 const teacher = await User.create({ name: 'Priya Teacher', email: 'teacher@dulingo.in', passwordHash: hash, role: 'teacher' });
@@ -108,6 +108,25 @@ A few days later she got a reply. Meena learned that asking in the right place, 
 
 for (const [title, translations] of Object.entries(TASK_TR)) await Task.updateOne({ title }, { translations });
 for (const [title, translations] of Object.entries(STORY_TR)) await Story.updateOne({ title }, { translations });
+
+await Announcement.insertMany([
+  {
+    title: 'Welcome to Dulingo Civic Learning!',
+    content: 'All students are encouraged to complete daily tasks to maintain your streak. Use Practice Mode anytime to review past questions.',
+    category: 'general',
+    pinned: true,
+    author: teacher._id,
+    authorName: 'Priya Teacher',
+  },
+  {
+    title: 'Aadhaar & Pension Submission Reminder',
+    content: 'Annual Life Certificates (Jeevan Pramaan) can be generated digitally at home using the face authentication app or nearest post office.',
+    category: 'civic_alert',
+    pinned: false,
+    author: teacher._id,
+    authorName: 'Priya Teacher',
+  },
+]);
 
 console.log('Seeded. Teacher: teacher@dulingo.in / demo1234 — Students: ramesh@dulingo.in etc. / demo1234');
 await mongoose.disconnect();

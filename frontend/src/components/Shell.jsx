@@ -17,6 +17,7 @@ import { useAuth } from '../context/index.js';
 import { useOnlineStatus } from '../hooks/index.js';
 import { LANGS } from '../constants/index.js';
 import { Octo } from './Mascot.jsx';
+import { OfflineSyncBanner } from './OfflineSyncBanner.jsx';
 
 /* ---------- Main Layout / Navigation Shell ---------- */
 export function Shell({ children }) {
@@ -152,6 +153,8 @@ export function Shell({ children }) {
           </div>
         </div>
       </header>
+
+      <OfflineSyncBanner />
 
       <main className="mx-auto max-w-5xl px-3.5 py-4 sm:px-6 sm:py-6">{children}</main>
 

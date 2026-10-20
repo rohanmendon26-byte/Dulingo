@@ -22,6 +22,9 @@ import {
   PieChart as PieChartIcon,
   Users,
   TrendingUp,
+  Megaphone,
+  Pin,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   BarChart,
@@ -749,6 +752,216 @@ function EssayReviewCard({ essay, onReviewed }) {
   );
 }
 
+function AnnouncementsManager() {
+  const [announcements, setAnnouncements] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [title, setTitle] = useState('');
+  const [content, setContent] = useState('');
+  const [category, setCategory] = useState('general');
+  const [pinned, setPinned] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+
+  const fetchAnnouncements = async () => {
+    try {
+      const d = await api('/announcements');
+      setAnnouncements(d.announcements || []);
+    } catch (e) {
+      console.warn(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAnnouncements();
+  }, []);
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    if (!title.trim() || !content.trim()) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      await api('/announcements', {
+        method: 'POST',
+        body: { title: title.trim(), content: content.trim(), category, pinned },
+      });
+      setMsg({ ok: true, text: 'Announcement broadcasted to student dashboards!' });
+      setTitle('');
+      setContent('');
+      setCategory('general');
+      setPinned(false);
+      fetchAnnouncements();
+      setTimeout(() => setMsg(null), 4000);
+    } catch (err) {
+      setMsg({ ok: false, text: err.message });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm('Remove this announcement? Students will no longer see it.')) return;
+    try {
+      await api(`/announcements/${id}`, { method: 'DELETE' });
+      setAnnouncements((prev) => prev.filter((a) => a.id !== id));
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <form onSubmit={handleCreate} className="card p-4 sm:p-5 space-y-4 dark:border-slate-700 dark:bg-black">
+        <div className="flex items-center gap-2 border-b border-brand-50 dark:border-slate-800 pb-2.5">
+          <Megaphone size={18} className="text-brand-600 dark:text-brand-400" />
+          <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100">
+            Broadcast New Announcement
+          </h2>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300">
+            Notice Title
+            <input
+              className="input mt-1 !text-xs sm:!text-sm"
+              placeholder="e.g. Tomorrow's Aadhaar Verification Workshop"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              required
+            />
+          </label>
+
+          <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300">
+            Category / Tone
+            <select
+              className="input mt-1 !text-xs sm:!text-sm font-bold"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+            >
+              <option value="general">📢 General Announcement</option>
+              <option value="urgent">🚨 Urgent Notice</option>
+              <option value="civic_alert">⚠️ Civic Alert / Policy Update</option>
+              <option value="assignment">📚 Assignment Reminder</option>
+              <option value="tip">💡 Study / Learning Tip</option>
+            </select>
+          </label>
+        </div>
+
+        <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300">
+          Announcement Message
+          <textarea
+            className="input mt-1 min-h-24 !text-xs sm:!text-sm"
+            placeholder="Type your announcement message here. Students will see this at the top of their dashboard feed..."
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            required
+          />
+        </label>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <label className="inline-flex items-center gap-2 text-xs font-extrabold text-slate-700 dark:text-slate-300 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={pinned}
+              onChange={(e) => setPinned(e.target.checked)}
+              className="h-4 w-4 rounded accent-brand-600 cursor-pointer"
+            />
+            <span className="flex items-center gap-1">
+              <Pin size={12} className="fill-amber-500 text-amber-600" />
+              Pin to top of student dashboards
+            </span>
+          </label>
+
+          <button
+            type="submit"
+            disabled={busy || !title.trim() || !content.trim()}
+            className="btn btn-primary !py-2 !px-5 text-xs sm:text-sm font-black inline-flex items-center gap-1.5 shadow-sm"
+          >
+            <Send size={14} />
+            <span>{busy ? 'Broadcasting...' : 'Broadcast to Class'}</span>
+          </button>
+        </div>
+
+        {msg && (
+          <p
+            role="alert"
+            className={`flex items-center gap-2 rounded-xl p-3 text-xs sm:text-sm font-bold ${
+              msg.ok
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                : 'bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
+            }`}
+          >
+            {msg.ok ? <CheckCircle2 size={16} /> : <X size={16} />}
+            <span>{msg.text}</span>
+          </p>
+        )}
+      </form>
+
+      {/* Broadcast History */}
+      <section className="space-y-3">
+        <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+          <Clock size={18} className="text-brand-600 dark:text-brand-400" />
+          <span>Active Announcements ({announcements.length})</span>
+        </h3>
+
+        {loading ? (
+          <Loading />
+        ) : announcements.length === 0 ? (
+          <p className="card p-4 text-center font-bold text-slate-500 dark:text-slate-400 dark:border-slate-700 dark:bg-black">
+            No active announcements. Broadcast your first notice above to update your students!
+          </p>
+        ) : (
+          <div className="space-y-2.5">
+            {announcements.map((a) => (
+              <div
+                key={a.id}
+                className="card p-3.5 sm:p-4 space-y-2 transition hover:shadow-xs dark:border-slate-700 dark:bg-black"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-brand-50 dark:border-slate-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    {a.pinned && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-black text-amber-800 dark:bg-amber-950/80 dark:border dark:border-amber-700 dark:text-amber-300">
+                        <Pin size={10} className="fill-amber-600" /> Pinned
+                      </span>
+                    )}
+                    <span className="rounded-md bg-brand-100 px-2 py-0.5 text-[10px] font-black uppercase text-brand-800 dark:bg-brand-950/80 dark:text-brand-300">
+                      {a.category}
+                    </span>
+                    <h4 className="font-black text-sm sm:text-base text-slate-900 dark:text-slate-100">
+                      {a.title}
+                    </h4>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-slate-400">
+                      {new Date(a.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(a.id)}
+                      className="btn btn-ghost !py-1 !px-2 text-xs text-rose-600 hover:bg-rose-50 border border-rose-200 dark:border-rose-900/60 dark:hover:bg-rose-950/60 inline-flex items-center gap-1 cursor-pointer"
+                      title="Delete announcement"
+                    >
+                      <Trash2 size={12} />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 whitespace-pre-line">
+                  {a.content}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 export default function Teacher() {
   const [tab, setTab] = useState('overview');
   const [data, setData] = useState(null);
@@ -764,6 +977,7 @@ export default function Teacher() {
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'task', label: 'New task', icon: PlusCircle },
     { id: 'story', label: 'New story', icon: BookOpen },
+    { id: 'announcements', label: 'Announcements', icon: Megaphone },
   ];
 
   return (
@@ -775,12 +989,12 @@ export default function Teacher() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Teacher Hub</h1>
           <p className="text-xs sm:text-sm font-semibold text-slate-600">
-            Publish interactive lessons, draft with AI, and review student essays
+            Publish interactive lessons, broadcast announcements, draft with AI, and review student essays
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-2" role="tablist">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="tablist">
         {tabs.map((t) => {
           const IconComp = t.icon;
           return (
@@ -802,6 +1016,7 @@ export default function Teacher() {
 
       {tab === 'task' && <TaskForm onSaved={load} />}
       {tab === 'story' && <StoryForm />}
+      {tab === 'announcements' && <AnnouncementsManager />}
 
       {tab === 'overview' && (!data ? <Loading /> : (
         <div className="space-y-6">
