@@ -17,6 +17,7 @@ const userSchema = new Schema(
     badges: { type: [String], default: [] },
     storiesRead: { type: [Schema.Types.ObjectId], default: [] },
     classrooms: [{ type: Schema.Types.ObjectId, ref: 'Classroom' }],
+    tokenVersion: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

@@ -2,6 +2,8 @@ import express from 'express';
 import crypto from 'node:crypto';
 import { Classroom, User, Task } from '../models/index.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+import { createClassroomSchema, joinClassroomSchema } from '../validators/schemas.js';
 import { wrap } from '../utils/asyncWrap.js';
 
 const router = express.Router();
@@ -94,14 +96,9 @@ router.post(
   '/classrooms',
   requireAuth,
   requireRole('teacher'),
+  validate(createClassroomSchema),
   wrap(async (req, res) => {
-    const name = String(req.body.name || '').trim();
-    const subject = String(req.body.subject || 'Civic Learning').trim();
-    const description = String(req.body.description || '').trim();
-
-    if (!name) {
-      return res.status(400).json({ error: 'Classroom name is required' });
-    }
+    const { name, subject, description } = req.body;
 
     const code = await generateUniqueClassroomCode();
 
@@ -141,11 +138,9 @@ router.post(
   '/classrooms/join',
   requireAuth,
   requireRole('student'),
+  validate(joinClassroomSchema),
   wrap(async (req, res) => {
-    const rawCode = String(req.body.code || '').trim().toUpperCase();
-    if (!rawCode) {
-      return res.status(400).json({ error: 'Please enter a classroom join code' });
-    }
+    const rawCode = req.body.code;
 
     const classroom = await Classroom.findOne({ code: rawCode, active: true }).populate('teacher', 'name');
     if (!classroom) {

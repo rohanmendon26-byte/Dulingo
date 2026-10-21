@@ -1,6 +1,8 @@
 import express from 'express';
 import { Task, Submission, Classroom } from '../models/index.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+import { submitTaskSchema } from '../validators/schemas.js';
 import { award, publicUser, todayIST, levelFor, BADGE_LABELS } from '../services/gameService.js';
 import { matches, isCorrect } from '../utils/stringUtils.js';
 import { wrap } from '../utils/asyncWrap.js';
@@ -111,7 +113,7 @@ router.get('/tasks/today', requireAuth, wrap(async (req, res) => {
   });
 }));
 
-router.post('/tasks/:id/submit', requireAuth, requireRole('student'), wrap(async (req, res) => {
+router.post('/tasks/:id/submit', requireAuth, requireRole('student'), validate(submitTaskSchema), wrap(async (req, res) => {
   const task = await Task.findById(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
   if (task.classroom) {

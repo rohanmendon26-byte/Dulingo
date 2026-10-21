@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { api, getToken, setToken } from '../services/api.js';
+import { api, getToken, setToken, setRefreshToken } from '../services/api.js';
 
 const CACHE_USER_KEY = 'dulingo_cached_user';
 const Ctx = createContext(null);
@@ -44,6 +44,18 @@ export function AuthProvider({ children }) {
     }
   }, [user]);
 
+  // Handle global session expiry (when refresh token expires or is revoked)
+  useEffect(() => {
+    const handleExpired = () => {
+      setToken(null);
+      setRefreshToken(null);
+      localStorage.removeItem(CACHE_USER_KEY);
+      setUser(null);
+    };
+    window.addEventListener('dulingo_session_expired', handleExpired);
+    return () => window.removeEventListener('dulingo_session_expired', handleExpired);
+  }, []);
+
   useEffect(() => {
     if (!getToken()) {
       setLoading(false);
@@ -62,6 +74,7 @@ export function AuthProvider({ children }) {
 
         if (isAuthError) {
           setToken(null);
+          setRefreshToken(null);
           localStorage.removeItem(CACHE_USER_KEY);
           setUser(null);
         }
@@ -72,6 +85,7 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (path, body) => {
     const d = await api(path, { method: 'POST', body });
     setToken(d.token);
+    if (d.refreshToken) setRefreshToken(d.refreshToken);
     setUser(d.user);
     if (d.user) {
       localStorage.setItem(CACHE_USER_KEY, JSON.stringify(d.user));
@@ -79,11 +93,15 @@ export function AuthProvider({ children }) {
     return d.user;
   }, []);
 
-  const logout = () => {
+  const logout = useCallback(async () => {
+    try {
+      await api('/auth/logout', { method: 'POST' });
+    } catch {}
     setToken(null);
+    setRefreshToken(null);
     localStorage.removeItem(CACHE_USER_KEY);
     setUser(null);
-  };
+  }, []);
 
   return (
     <Ctx.Provider value={{ user, setUser, loading, login, logout, large, setLarge, lang, setLang, dark, setDark }}>

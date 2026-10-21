@@ -1,6 +1,8 @@
 import express from 'express';
 import { User, Task, Submission, Story, Classroom } from '../models/index.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
+import { validate } from '../middleware/validate.js';
+import { createTaskSchema } from '../validators/schemas.js';
 import { audioUpload } from '../middleware/upload.js';
 import { hasCloudinary, cloudinary } from '../config/cloudinary.js';
 import { draftTaskWithAI } from '../services/aiService.js';
@@ -168,7 +170,7 @@ router.post('/teacher/ai-draft', ...teacher, wrap(async (req, res) => {
   res.json({ draft });
 }));
 
-router.post('/teacher/tasks', ...teacher, wrap(async (req, res) => {
+router.post('/teacher/tasks', ...teacher, validate(createTaskSchema), wrap(async (req, res) => {
   const b = req.body;
   if (!b.title || !b.prompt || !['audio_mcq', 'fill_blank', 'essay', 'mock_form'].includes(b.type))
     return res.status(400).json({ error: 'Title, question and type are required' });

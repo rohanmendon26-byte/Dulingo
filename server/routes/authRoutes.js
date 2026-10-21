@@ -1,32 +1,127 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { User } from '../models/index.js';
-import { sign, requireAuth } from '../middleware/auth.js';
+import {
+  signAccessToken,
+  signRefreshToken,
+  verifyRefreshToken,
+  getCookieOptions,
+  REFRESH_COOKIE_NAME,
+  requireAuth,
+} from '../middleware/auth.js';
 import { authLimiter } from '../middleware/rateLimiter.js';
+import { validate } from '../middleware/validate.js';
+import { registerSchema, loginSchema } from '../validators/schemas.js';
 import { publicUser } from '../services/gameService.js';
 import { wrap } from '../utils/asyncWrap.js';
 
 const router = express.Router();
 
-router.post('/auth/register', authLimiter, wrap(async (req, res) => {
-  const { name, email, password, role } = req.body;
-  if (!name || !email || !password || password.length < 6)
-    return res.status(400).json({ error: 'Name, email and a password of 6+ characters are required' });
-  if (await User.findOne({ email: email.toLowerCase() }))
-    return res.status(409).json({ error: 'This email is already registered' });
-  const user = await User.create({
-    name, email, passwordHash: await bcrypt.hash(password, 10),
-    role: role === 'teacher' ? 'teacher' : 'student',
-  });
-  res.json({ token: sign(user), user: publicUser(user) });
-}));
+// Helper to set refresh token cookie & return payload
+function sendAuthResponse(res, user, statusCode = 200) {
+  const accessToken = signAccessToken(user);
+  const refreshToken = signRefreshToken(user);
 
-router.post('/auth/login', authLimiter, wrap(async (req, res) => {
-  const user = await User.findOne({ email: String(req.body.email || '').toLowerCase() });
-  if (!user || !(await bcrypt.compare(req.body.password || '', user.passwordHash)))
-    return res.status(401).json({ error: 'Wrong email or password' });
-  res.json({ token: sign(user), user: publicUser(user) });
-}));
+  res.cookie(REFRESH_COOKIE_NAME, refreshToken, getCookieOptions());
+
+  return res.status(statusCode).json({
+    token: accessToken,
+    refreshToken,
+    user: publicUser(user),
+  });
+}
+
+router.post(
+  '/auth/register',
+  authLimiter,
+  validate(registerSchema),
+  wrap(async (req, res) => {
+    const { name, email, password, role } = req.body;
+
+    const existing = await User.findOne({ email: email.toLowerCase() });
+    if (existing) {
+      return res.status(409).json({ error: 'This email is already registered' });
+    }
+
+    const user = await User.create({
+      name,
+      email: email.toLowerCase(),
+      passwordHash: await bcrypt.hash(password, 10),
+      role: role === 'teacher' ? 'teacher' : 'student',
+    });
+
+    return sendAuthResponse(res, user, 201);
+  })
+);
+
+router.post(
+  '/auth/login',
+  authLimiter,
+  validate(loginSchema),
+  wrap(async (req, res) => {
+    const { email, password } = req.body;
+    const user = await User.findOne({ email: email.toLowerCase() });
+
+    if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+      return res.status(401).json({ error: 'Wrong email or password' });
+    }
+
+    return sendAuthResponse(res, user, 200);
+  })
+);
+
+router.post(
+  '/auth/refresh',
+  wrap(async (req, res) => {
+    const tokenFromCookie = req.cookies?.[REFRESH_COOKIE_NAME];
+    const tokenFromBody = req.body?.refreshToken;
+    const tokenFromHeader = req.headers['x-refresh-token'];
+    const refreshToken = tokenFromCookie || tokenFromBody || tokenFromHeader;
+
+    if (!refreshToken) {
+      return res.status(401).json({ error: 'No refresh token provided', code: 'REFRESH_MISSING' });
+    }
+
+    const decoded = verifyRefreshToken(refreshToken);
+    if (!decoded || !decoded.id) {
+      return res.status(401).json({ error: 'Refresh token expired or invalid', code: 'REFRESH_INVALID' });
+    }
+
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res.status(401).json({ error: 'Account not found', code: 'ACCOUNT_NOT_FOUND' });
+    }
+
+    // Check tokenVersion for session revocation
+    if ((user.tokenVersion || 0) !== (decoded.version || 0)) {
+      return res.status(401).json({ error: 'Session was revoked, please log in again', code: 'SESSION_REVOKED' });
+    }
+
+    // Issue refreshed access token + rotated refresh token
+    return sendAuthResponse(res, user, 200);
+  })
+);
+
+router.post('/auth/logout', async (req, res) => {
+  res.clearCookie(REFRESH_COOKIE_NAME, {
+    ...getCookieOptions(),
+    maxAge: 0,
+  });
+
+  try {
+    const header = req.headers.authorization || '';
+    const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+    if (token) {
+      const decoded = jwt.decode(token);
+      if (decoded?.id) {
+        await User.findByIdAndUpdate(decoded.id, { $inc: { tokenVersion: 1 } });
+      }
+    }
+  } catch {}
+
+  res.json({ ok: true, message: 'Logged out successfully' });
+});
 
 router.get('/me', requireAuth, (req, res) => res.json({ user: publicUser(req.user) }));
 

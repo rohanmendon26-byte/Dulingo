@@ -1,4 +1,5 @@
 const TOKEN_KEY = 'dulingo_token';
+const REFRESH_TOKEN_KEY = 'dulingo_refresh_token';
 const CACHE_TASKS_KEY = 'dulingo_cached_tasks_today';
 const CACHE_STORIES_KEY = 'dulingo_cached_stories';
 const CACHE_USER_KEY = 'dulingo_cached_user';
@@ -6,9 +7,62 @@ const OFFLINE_QUEUE_KEY = 'dulingo_offline_queue';
 
 export const getToken = () => localStorage.getItem(TOKEN_KEY);
 export const setToken = (t) => (t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY));
+export const getRefreshToken = () => localStorage.getItem(REFRESH_TOKEN_KEY);
+export const setRefreshToken = (t) =>
+  t ? localStorage.setItem(REFRESH_TOKEN_KEY, t) : localStorage.removeItem(REFRESH_TOKEN_KEY);
 
 // Set VITE_API_URL when the API is hosted separately
 const BASE = import.meta.env.VITE_API_URL || '';
+
+let refreshPromise = null;
+
+/**
+ * Performs silent background token refresh without disrupting user forms or quests
+ */
+export async function silentRefreshToken() {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    try {
+      const refreshToken = getRefreshToken();
+      const res = await fetch(`${BASE}/api/auth/refresh`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(refreshToken ? { 'x-refresh-token': refreshToken } : {}),
+        },
+        credentials: 'include',
+        body: JSON.stringify({ refreshToken }),
+      });
+
+      if (!res.ok) {
+        setToken(null);
+        setRefreshToken(null);
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('dulingo_session_expired'));
+        }
+        return null;
+      }
+
+      const data = await res.json().catch(() => ({}));
+      if (data.token) {
+        setToken(data.token);
+        if (data.refreshToken) setRefreshToken(data.refreshToken);
+        if (data.user) {
+          localStorage.setItem(CACHE_USER_KEY, JSON.stringify(data.user));
+        }
+        return data.token;
+      }
+      return null;
+    } catch {
+      return null;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
+}
 
 /** Helper to read offline queue */
 export const getOfflineQueue = () => {
@@ -129,7 +183,7 @@ function gradeTaskOffline(taskId, body) {
   };
 }
 
-export async function api(path, { method = 'GET', body } = {}) {
+export async function api(path, { method = 'GET', body, _retry = false } = {}) {
   // If we know browser is explicitly offline
   const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
 
@@ -173,8 +227,23 @@ export async function api(path, { method = 'GET', body } = {}) {
         'Content-Type': 'application/json',
         ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
       },
+      credentials: 'include',
       body: body ? JSON.stringify(body) : undefined,
     });
+
+    // Auto-refresh expired access token and replay request seamlessly
+    if (
+      res.status === 401 &&
+      !_retry &&
+      !path.startsWith('/auth/login') &&
+      !path.startsWith('/auth/register') &&
+      !path.startsWith('/auth/refresh')
+    ) {
+      const refreshedToken = await silentRefreshToken();
+      if (refreshedToken) {
+        return api(path, { method, body, _retry: true });
+      }
+    }
 
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.error || 'Request failed');
@@ -239,6 +308,7 @@ export async function syncOfflineQueue() {
         'Content-Type': 'application/json',
         ...(getToken() ? { Authorization: `Bearer ${getToken()}` } : {}),
       },
+      credentials: 'include',
       body: JSON.stringify({ items: queue }),
     });
 
