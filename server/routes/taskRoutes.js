@@ -41,17 +41,47 @@ router.get('/tasks/today', requireAuth, wrap(async (req, res) => {
     .limit(50);
   const subs = await Submission.find({ user: req.user._id, task: { $in: tasks.map((t) => t._id) } });
   const done = new Map(subs.map((s) => [String(s.task), s]));
-  const list = tasks.map((t) => ({
-    id: t._id, title: t.title, topic: t.topic, type: t.type, prompt: t.prompt,
-    audioText: t.audioText || t.prompt, audioUrl: t.audioUrl || '', options: t.options, xp: t.xp,
-    assignedDate: t.assignedDate, isToday: t.assignedDate === today, translations: t.translations || {},
-    fields: (t.fields || []).map((f) => ({ label: f.label, hint: f.hint, placeholder: f.placeholder })),
-    classroom: t.classroom ? { id: t.classroom._id, name: t.classroom.name, code: t.classroom.code } : null,
-    done: done.has(String(t._id)),
-    result: done.has(String(t._id))
-      ? { correct: done.get(String(t._id)).correct, xpEarned: done.get(String(t._id)).xpEarned }
-      : null,
-  }));
+  const now = new Date();
+  const list = tasks.map((t) => {
+    let isExpired = false;
+    let daysLeft = null;
+    let hoursLeft = null;
+    let expDate = null;
+
+    if (t.expiresAt) {
+      expDate = new Date(t.expiresAt);
+    } else if (t.dueDate) {
+      expDate = new Date(`${t.dueDate}T${t.dueTime || '23:59'}:00`);
+    }
+
+    if (expDate && !isNaN(expDate.getTime())) {
+      isExpired = now > expDate;
+      const diffMs = expDate - now;
+      if (diffMs > 0) {
+        hoursLeft = Math.floor(diffMs / (1000 * 60 * 60));
+        daysLeft = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      }
+    }
+
+    return {
+      id: t._id, title: t.title, topic: t.topic, type: t.type, prompt: t.prompt,
+      audioText: t.audioText || t.prompt, audioUrl: t.audioUrl || '', options: t.options, xp: t.xp,
+      assignedDate: t.assignedDate,
+      dueDate: t.dueDate || null,
+      dueTime: t.dueTime || '23:59',
+      expiresAt: t.expiresAt || null,
+      isExpired,
+      daysLeft,
+      hoursLeft,
+      isToday: t.assignedDate === today, translations: t.translations || {},
+      fields: (t.fields || []).map((f) => ({ label: f.label, hint: f.hint, placeholder: f.placeholder })),
+      classroom: t.classroom ? { id: t.classroom._id, name: t.classroom.name, code: t.classroom.code } : null,
+      done: done.has(String(t._id)),
+      result: done.has(String(t._id))
+        ? { correct: done.get(String(t._id)).correct, xpEarned: done.get(String(t._id)).xpEarned }
+        : null,
+    };
+  });
   // pending first, today's before older ones
   list.sort((a, b) => Number(a.done) - Number(b.done) || Number(b.isToday) - Number(a.isToday));
   const todays = list.filter((t) => t.isToday);
@@ -90,6 +120,14 @@ router.post('/tasks/:id/submit', requireAuth, requireRole('student'), wrap(async
       return res.status(403).json({ error: 'You are not enrolled in the classroom for this task.' });
     }
   }
+
+  // Check if deadline timeline has passed
+  const now = new Date();
+  let expDate = task.expiresAt ? new Date(task.expiresAt) : (task.dueDate ? new Date(`${task.dueDate}T${task.dueTime || '23:59'}:00`) : null);
+  if (expDate && !isNaN(expDate.getTime()) && now > expDate) {
+    return res.status(403).json({ error: 'The deadline for this task has passed. You can still practice it in Practice Mode without XP.' });
+  }
+
   if (await Submission.exists({ user: req.user._id, task: task._id }))
     return res.status(409).json({ error: 'You already completed this task' });
 

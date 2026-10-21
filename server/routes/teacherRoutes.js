@@ -119,6 +119,9 @@ router.get('/teacher/overview', ...teacher, wrap(async (req, res) => {
       type: t.type,
       xp: t.xp,
       assignedDate: t.assignedDate,
+      dueDate: t.dueDate || null,
+      dueTime: t.dueTime || '23:59',
+      expiresAt: t.expiresAt || null,
       audioUrl: t.audioUrl || '',
       classroom: t.classroom ? { id: t.classroom._id, name: t.classroom.name, code: t.classroom.code } : null,
     })),
@@ -188,12 +191,26 @@ router.post('/teacher/tasks', ...teacher, wrap(async (req, res) => {
   }
   const classroomId = cls._id;
 
+  const dueDate = b.dueDate ? String(b.dueDate).trim() : null;
+  const dueTime = b.dueTime ? String(b.dueTime).trim() : '23:59';
+  let expiresAt = null;
+  if (dueDate) {
+    try {
+      expiresAt = new Date(`${dueDate}T${dueTime}:00`);
+    } catch {
+      expiresAt = null;
+    }
+  }
+
   const task = await Task.create({
     fields: b.type === 'mock_form' ? fields : [],
     title: b.title, topic: b.topic || 'General', type: b.type, prompt: b.prompt,
     audioText: b.audioText || '', audioUrl: b.audioUrl || '', options, answer: String(b.answer || '').trim(),
     explanation: b.explanation || '', xp: Math.min(Math.max(Number(b.xp) || 10, 1), 100),
     assignedDate: b.assignedDate || todayIST(), createdBy: req.user._id,
+    dueDate,
+    dueTime,
+    expiresAt,
     classroom: classroomId,
     translations: b.translations || {},
   });

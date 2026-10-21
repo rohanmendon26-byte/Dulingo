@@ -29,6 +29,7 @@ import {
   Copy,
   Check,
   UserCheck,
+  Calendar,
 } from 'lucide-react';
 import {
   BarChart,
@@ -58,6 +59,9 @@ const blankTask = {
   explanation: '',
   xp: 10,
   classroom: '',
+  assignedDate: new Date().toISOString().slice(0, 10),
+  dueDate: '',
+  dueTime: '23:59',
   fields: [
     { label: '', answer: '', hint: '' },
     { label: '', answer: '', hint: '' },
@@ -495,6 +499,84 @@ function TaskForm({ onSaved, initialClassroomId = '', onGoToClassrooms }) {
             </span>
           </label>
         )}
+      </div>
+
+      {/* Question Publishing Timeline & Deadline */}
+      <div className="rounded-2xl border-2 border-brand-200 bg-brand-50/50 dark:border-slate-800 dark:bg-slate-900/90 p-3.5 sm:p-4 space-y-3 shadow-2xs">
+        <div className="flex items-center gap-2">
+          <Calendar size={18} className="text-brand-600 dark:text-brand-400" />
+          <div>
+            <h3 className="text-xs sm:text-sm font-black text-slate-900 dark:text-slate-100">
+              Question Timeline & Deadline
+            </h3>
+            <p className="text-[11px] font-semibold text-slate-500">
+              Schedule when this question is assigned and set its submission deadline
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300">
+            Publish Date
+            <input
+              type="date"
+              className="input mt-1 !text-xs sm:!text-sm font-bold"
+              value={f.assignedDate}
+              onChange={set('assignedDate')}
+              required
+            />
+          </label>
+
+          <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300">
+            Deadline Date (Optional)
+            <input
+              type="date"
+              className="input mt-1 !text-xs sm:!text-sm font-bold"
+              value={f.dueDate || ''}
+              onChange={set('dueDate')}
+            />
+          </label>
+
+          <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300">
+            Deadline Time
+            <input
+              type="time"
+              className="input mt-1 !text-xs sm:!text-sm font-bold"
+              value={f.dueTime || '23:59'}
+              onChange={set('dueTime')}
+              disabled={!f.dueDate}
+            />
+          </label>
+        </div>
+
+        {/* Quick Deadline Presets */}
+        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+          <span className="text-[11px] font-black text-slate-500">Quick Due Date:</span>
+          {[
+            { label: 'Today (Midnight)', days: 0 },
+            { label: 'Tomorrow (24h)', days: 1 },
+            { label: 'In 3 Days', days: 3 },
+            { label: 'In 1 Week', days: 7 },
+            { label: 'No Deadline', days: null },
+          ].map((preset) => (
+            <button
+              key={preset.label}
+              type="button"
+              onClick={() => {
+                if (preset.days === null) {
+                  setF({ ...f, dueDate: '' });
+                } else {
+                  const d = new Date();
+                  d.setDate(d.getDate() + preset.days);
+                  setF({ ...f, dueDate: d.toISOString().slice(0, 10), dueTime: '23:59' });
+                }
+              }}
+              className="rounded-full border border-brand-200 bg-white dark:bg-slate-800 dark:border-slate-700 dark:text-brand-300 px-2.5 py-0.5 text-xs font-bold text-brand-700 hover:bg-brand-50 transition cursor-pointer"
+            >
+              {preset.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <label className="block font-extrabold text-xs sm:text-sm">Question / instruction
@@ -1637,7 +1719,15 @@ export default function Teacher() {
                         </span>
                       )}
                     </div>
-                    <p className="text-xs font-bold text-slate-500">{TYPE_LABEL[t.type]} · {t.assignedDate} · {t.xp} XP</p>
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-bold text-slate-500">
+                      <span>{TYPE_LABEL[t.type]} · Assigned: {t.assignedDate} · {t.xp} XP</span>
+                      {t.dueDate && (
+                        <span className="inline-flex items-center gap-1 font-extrabold text-amber-700 dark:text-amber-400">
+                          <Clock size={11} />
+                          <span>Deadline: {t.dueDate} {t.dueTime ? `at ${t.dueTime}` : ''}</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <button
                     className="btn btn-ghost !px-2.5 !py-1 text-xs text-rose-600 border-rose-200 hover:bg-rose-50 inline-flex items-center gap-1"

@@ -17,6 +17,7 @@ import {
   Square,
   WifiOff,
   RotateCcw,
+  Clock,
 } from 'lucide-react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
@@ -261,6 +262,16 @@ export default function Quest() {
               {rawTask?.classroom && (
                 <span className="rounded-md bg-brand-100 text-brand-800 dark:bg-brand-950/80 dark:text-brand-300 text-[10px] font-black px-1.5 py-0.5 border border-brand-200 dark:border-brand-800">
                   🏫 {rawTask.classroom.name}
+                </span>
+              )}
+              {rawTask?.dueDate && (
+                <span className={`rounded-md text-[10px] font-black px-1.5 py-0.5 border inline-flex items-center gap-1 ${
+                  rawTask.isExpired
+                    ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border-rose-200'
+                    : 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border-amber-200'
+                }`}>
+                  <Clock size={10} />
+                  <span>{rawTask.isExpired ? 'Deadline Passed' : `Due: ${rawTask.dueDate} ${rawTask.dueTime ? `(${rawTask.dueTime})` : ''}`}</span>
                 </span>
               )}
             </div>

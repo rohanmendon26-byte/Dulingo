@@ -680,9 +680,24 @@ export default function Dashboard() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
-                    {t.topic} · {TYPE_LABEL[t.type]}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs font-bold text-slate-500 dark:text-slate-400">
+                    <span>{t.topic} · {TYPE_LABEL[t.type]}</span>
+                    {t.isExpired ? (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 dark:border dark:border-rose-800 text-[10px] font-black px-1.5 py-0.2">
+                        <Clock size={10} />
+                        <span>Deadline Passed</span>
+                      </span>
+                    ) : t.dueDate ? (
+                      <span className={`inline-flex items-center gap-1 rounded-md text-[10px] font-black px-1.5 py-0.2 ${
+                        t.hoursLeft !== null && t.hoursLeft <= 24
+                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 animate-pulse'
+                          : 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300'
+                      }`}>
+                        <Clock size={10} />
+                        <span>Due {t.dueDate} {t.dueTime ? `at ${t.dueTime}` : ''} {t.daysLeft !== null && t.daysLeft > 0 ? `(${t.daysLeft}d left)` : t.hoursLeft !== null ? `(${t.hoursLeft}h left)` : ''}</span>
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
 
                 <div className="shrink-0 flex items-center gap-1.5">
@@ -707,6 +722,15 @@ export default function Dashboard() {
                         {t.result?.correct ? 'Done' : 'Tried'}
                       </span>
                     </>
+                  ) : t.isExpired ? (
+                    <Link
+                      to={`/quest?practiceId=${t.id}&mode=practice`}
+                      className="inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50/90 px-2.5 py-1 text-xs font-black text-rose-700 hover:bg-rose-100 dark:border-rose-900/80 dark:bg-rose-950/70 dark:text-rose-300 transition"
+                      title="Deadline passed - Practice Mode only"
+                    >
+                      <RotateCcw size={12} />
+                      <span>Practice (Closed)</span>
+                    </Link>
                   ) : (
                     <span className="inline-flex items-center gap-1 rounded-xl bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 dark:border dark:border-amber-800/60 px-2.5 py-1 text-xs font-black">
                       <Zap size={12} className="fill-amber-500 text-amber-600 dark:text-amber-400" />

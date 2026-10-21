@@ -17,6 +17,9 @@ const taskSchema = new Schema(
     fields: { type: [new Schema({ label: String, answer: String, hint: String, placeholder: String }, { _id: false })], default: [] },
     xp: { type: Number, default: 10 },
     assignedDate: { type: String, required: true }, // YYYY-MM-DD
+    dueDate: { type: String, default: null }, // YYYY-MM-DD deadline
+    dueTime: { type: String, default: '23:59' }, // HH:mm deadline time
+    expiresAt: { type: Date, default: null }, // exact timestamp deadline
     translations: { type: Schema.Types.Mixed, default: {} }, // { hi: {title,prompt,audioText,options,explanation}, kn: {...} }
     createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
     classroom: { type: Schema.Types.ObjectId, ref: 'Classroom', default: null },
