@@ -23,10 +23,11 @@ function RankBadge({ rank }) {
   if (rank === 1) {
     return (
       <div
-        className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-amber-200 to-amber-400 text-amber-950 border-2 border-amber-400 shadow-md ring-2 ring-amber-300/60 dark:ring-amber-400/60"
+        className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-amber-300 to-amber-500 border-2 border-amber-300 shadow-md ring-2 ring-amber-400/80"
         title="1st Place · Podium Champion"
+        style={{ color: '#0f172a' }}
       >
-        <Crown size={22} className="fill-amber-400 stroke-amber-950" />
+        <Crown size={22} className="fill-amber-400 stroke-amber-950" style={{ stroke: '#0f172a' }} />
       </div>
     );
   }
@@ -372,11 +373,12 @@ export default function Leaderboard() {
                     <RankBadge rank={k + 1} />
 
                     <div
-                      className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-black shadow-xs ${
+                      className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-sm font-black shadow-md ${
                         isTopper
-                          ? 'bg-amber-300 text-amber-950 ring-2 ring-amber-400/80 font-black'
-                          : 'bg-brand-200 text-brand-800 dark:bg-brand-900 dark:text-brand-200'
+                          ? 'topper-avatar ring-2 ring-amber-400 font-black'
+                          : 'bg-brand-100 text-brand-800 dark:bg-brand-950 dark:text-brand-200 border border-brand-200 dark:border-brand-800'
                       }`}
+                      style={isTopper ? { color: '#0f172a', backgroundColor: '#fde047' } : undefined}
                       aria-hidden="true"
                     >
                       {r.name[0]?.toUpperCase()}
@@ -399,33 +401,37 @@ export default function Leaderboard() {
 
                     {r.streak > 0 && (
                       <span
-                        className={`inline-flex items-center gap-1 text-xs font-black px-2 py-1 rounded-full border ${
+                        className={`inline-flex items-center gap-1 text-xs font-black px-2.5 py-1 rounded-full border shadow-2xs ${
                           isTopper
-                            ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-900/80 dark:text-amber-100 dark:border-amber-500'
-                            : 'bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:border-amber-800/70 dark:text-amber-300 border-amber-200'
+                            ? 'bg-amber-100 text-amber-950 border-amber-300 dark:bg-amber-950/90 dark:text-amber-200 dark:border-amber-400'
+                            : 'bg-orange-50 text-orange-700 dark:bg-orange-950/80 dark:text-orange-200 dark:border-orange-800 border-orange-200'
                         }`}
                       >
-                        <Flame size={13} className="fill-amber-500 stroke-amber-600 dark:stroke-amber-400" />
+                        <Flame size={13} className="fill-orange-500 stroke-orange-600 dark:stroke-orange-400" />
                         <span>{r.streak}d</span>
                       </span>
                     )}
 
                     <span
-                      className={`inline-flex items-center gap-1 text-xs sm:text-sm font-black px-2.5 py-1 rounded-full border ${
+                      className={`inline-flex items-center gap-1.5 text-xs sm:text-sm font-black px-3 py-1 rounded-full border shadow-xs ${
                         isTopper
-                          ? 'bg-amber-400/90 text-amber-950 border-amber-500 dark:bg-amber-300 dark:text-amber-950 dark:border-amber-200 shadow-xs'
-                          : 'bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:border-brand-800/70 dark:text-brand-300 border-brand-200'
+                          ? 'topper-xp'
+                          : r.you
+                          ? 'bg-brand-100 text-brand-900 border-brand-300 dark:bg-brand-900/80 dark:text-brand-100 dark:border-brand-600'
+                          : 'bg-slate-100 text-slate-900 border-slate-300 dark:bg-slate-800 dark:text-slate-100 dark:border-slate-700'
                       }`}
+                      style={isTopper ? { color: '#0f172a', backgroundColor: '#fde047', borderColor: '#fbbf24' } : undefined}
                     >
                       <Zap
                         size={14}
                         className={
                           isTopper
-                            ? 'fill-amber-950 text-amber-950'
-                            : 'fill-brand-400 stroke-brand-700 dark:stroke-brand-400'
+                            ? 'fill-slate-950 stroke-slate-950'
+                            : 'fill-amber-400 stroke-amber-500'
                         }
+                        style={isTopper ? { color: '#0f172a', fill: '#0f172a' } : undefined}
                       />
-                      <span>{r.xp} XP</span>
+                      <span style={isTopper ? { color: '#0f172a' } : undefined}>{r.xp} XP</span>
                     </span>
                   </motion.li>
                 );

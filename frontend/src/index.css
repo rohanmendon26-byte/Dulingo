@@ -564,3 +564,27 @@ html.dark .podium-topper .text-slate-500 {
   color: #f3e8ff !important;
 }
 
+/* Podium Topper Avatar & Badge Contrast Protection - Guarantees dark text on bright gold */
+.podium-topper .topper-avatar,
+html.dark .podium-topper .topper-avatar {
+  background: linear-gradient(135deg, #fde047 0%, #f59e0b 100%) !important;
+  color: #0f172a !important;
+  border: 2px solid #fbbf24 !important;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35) !important;
+}
+
+.podium-topper .topper-xp,
+html.dark .podium-topper .topper-xp {
+  background: #fde047 !important;
+  color: #0f172a !important;
+  border: 1.5px solid #fbbf24 !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+.podium-topper .topper-xp *,
+html.dark .podium-topper .topper-xp * {
+  color: #0f172a !important;
+  fill: #0f172a !important;
+  stroke: #0f172a !important;
+}
+
