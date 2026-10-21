@@ -1,27 +1,51 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Trophy, Crown, Medal, Flame, Zap, Sparkles, School, Globe, Users } from 'lucide-react';
+import {
+  Trophy,
+  Crown,
+  Medal,
+  Flame,
+  Zap,
+  Sparkles,
+  School,
+  Globe,
+  Users,
+  Copy,
+  Check,
+  Plus,
+  AlertCircle,
+  CheckCircle2,
+} from 'lucide-react';
 import { api } from '../api.js';
 import { Loading } from '../components.jsx';
 
 function RankBadge({ rank }) {
   if (rank === 1) {
     return (
-      <div className="grid h-9 w-9 place-items-center rounded-xl bg-amber-100 text-amber-700 border border-amber-300 dark:bg-amber-950/70 dark:border-amber-700/80 dark:text-amber-300 shadow-xs" title="1st Place">
-        <Crown size={20} className="fill-amber-400 stroke-amber-700 dark:stroke-amber-400" />
+      <div
+        className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-amber-200 to-amber-400 text-amber-950 border-2 border-amber-400 shadow-md ring-2 ring-amber-300/60 dark:ring-amber-400/60"
+        title="1st Place · Podium Champion"
+      >
+        <Crown size={22} className="fill-amber-400 stroke-amber-950" />
       </div>
     );
   }
   if (rank === 2) {
     return (
-      <div className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 text-slate-600 border border-slate-300 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 shadow-xs" title="2nd Place">
+      <div
+        className="grid h-9 w-9 place-items-center rounded-xl bg-slate-100 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 shadow-xs"
+        title="2nd Place"
+      >
         <Medal size={20} className="text-slate-500 dark:text-slate-300" />
       </div>
     );
   }
   if (rank === 3) {
     return (
-      <div className="grid h-9 w-9 place-items-center rounded-xl bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/50 dark:border-amber-800 dark:text-amber-300 shadow-xs" title="3rd Place">
+      <div
+        className="grid h-9 w-9 place-items-center rounded-xl bg-amber-50 text-amber-800 border border-amber-200 dark:bg-amber-950/50 dark:border-amber-800 dark:text-amber-300 shadow-xs"
+        title="3rd Place"
+      >
         <Medal size={20} className="text-amber-700 dark:text-amber-400" />
       </div>
     );
@@ -34,80 +58,258 @@ function RankBadge({ rank }) {
 }
 
 export default function Leaderboard() {
+  const [boardSection, setBoardSection] = useState('classroom'); // 'classroom' | 'public'
   const [period, setPeriod] = useState('week');
   const [data, setData] = useState(null);
   const [classrooms, setClassrooms] = useState([]);
   const [selectedClassroomId, setSelectedClassroomId] = useState('');
+  const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    api('/classrooms/my')
+  // Quick join classroom state (if learner has no classroom yet)
+  const [quickCode, setQuickCode] = useState('');
+  const [quickJoining, setQuickJoining] = useState(false);
+  const [quickMsg, setQuickMsg] = useState(null);
+
+  const fetchClassrooms = () => {
+    return api('/classrooms/my')
       .then((res) => {
         const list = res.classrooms || [];
         setClassrooms(list);
-        if (list.length > 0 && !selectedClassroomId) {
-          setSelectedClassroomId(list[0].id);
+        if (list.length > 0) {
+          if (!selectedClassroomId || !list.some((c) => c.id === selectedClassroomId)) {
+            setSelectedClassroomId(list[0].id);
+          }
+        } else {
+          // If no classrooms, fallback to overall public board
+          setBoardSection('public');
         }
+        return list;
       })
-      .catch(() => {});
+      .catch(() => []);
+  };
+
+  useEffect(() => {
+    fetchClassrooms();
   }, []);
 
   useEffect(() => {
     setData(null);
-    const q = selectedClassroomId ? `&classroomId=${selectedClassroomId}` : '';
-    api(`/leaderboard?period=${period}${q}`).then(setData);
-  }, [period, selectedClassroomId]);
+    if (boardSection === 'public') {
+      api(`/leaderboard?period=${period}`).then(setData);
+    } else {
+      if (selectedClassroomId) {
+        api(`/leaderboard?period=${period}&classroomId=${selectedClassroomId}`).then(setData);
+      } else {
+        setData({ rows: [], classroom: null });
+      }
+    }
+  }, [period, boardSection, selectedClassroomId]);
+
+  const handleCopyCode = (code) => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleQuickJoin = async (e) => {
+    e.preventDefault();
+    const clean = quickCode.trim().toUpperCase();
+    if (!clean) return;
+    setQuickJoining(true);
+    setQuickMsg(null);
+    try {
+      const res = await api('/classrooms/join', {
+        method: 'POST',
+        body: { code: clean },
+      });
+      setQuickMsg({ ok: true, text: res.message || `Joined ${res.classroom?.name}!` });
+      setQuickCode('');
+      const updatedList = await fetchClassrooms();
+      if (res.classroom?.id) {
+        setSelectedClassroomId(res.classroom.id);
+        setBoardSection('classroom');
+      }
+      setTimeout(() => setQuickMsg(null), 4000);
+    } catch (err) {
+      setQuickMsg({ ok: false, text: err.message });
+    } finally {
+      setQuickJoining(false);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
+      {/* Header */}
       <div className="flex items-center gap-3">
         <div className="grid h-11 w-11 place-items-center rounded-2xl bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-950/70 dark:border-amber-700/80 dark:text-amber-300 shadow-xs">
           <Trophy size={24} />
         </div>
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100">
-            {data?.classroom ? `${data.classroom.name} Leaderboard` : 'Leaderboard'}
+            Leaderboard
           </h1>
           <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
-            {data?.classroom
-              ? `${data.classroom.totalStudents || data.totalLearners} learners in this classroom · Code: ${data.classroom.code}`
-              : 'See who has earned the most XP across the platform'}
+            {boardSection === 'classroom'
+              ? 'Rankings scoped strictly to learners in your classroom'
+              : 'Overall platform rankings across all registered learners'}
           </p>
         </div>
       </div>
 
-      {/* Classroom Scope Switcher Pills */}
-      {classrooms.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-          {classrooms.map((c) => (
-            <button
-              key={c.id}
-              type="button"
-              onClick={() => setSelectedClassroomId(c.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-1.5 ${
-                selectedClassroomId === c.id
-                  ? 'bg-white dark:bg-black text-brand-700 dark:text-brand-300 shadow-2xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-              }`}
-            >
-              <School size={14} />
-              <span>{c.name} ({c.studentCount} learners)</span>
-            </button>
-          ))}
-          <button
-            type="button"
-            onClick={() => setSelectedClassroomId('')}
-            className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-1.5 ${
-              !selectedClassroomId
-                ? 'bg-white dark:bg-black text-brand-700 dark:text-brand-300 shadow-2xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
-            }`}
-          >
-            <Globe size={14} />
-            <span>All Learners (Global)</span>
-          </button>
-        </div>
+      {/* Primary Section Switcher Tabs */}
+      <div className="grid grid-cols-2 gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+        <button
+          type="button"
+          onClick={() => {
+            setBoardSection('public');
+          }}
+          className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center justify-center gap-2 ${
+            boardSection === 'public'
+              ? 'bg-white dark:bg-black text-brand-700 dark:text-brand-300 shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+          }`}
+        >
+          <Globe size={16} />
+          <span>Overall Public Leaderboard</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            setBoardSection('classroom');
+            if (classrooms.length > 0 && !selectedClassroomId) {
+              setSelectedClassroomId(classrooms[0].id);
+            }
+          }}
+          className={`py-2.5 px-3 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center justify-center gap-2 ${
+            boardSection === 'classroom'
+              ? 'bg-white dark:bg-black text-brand-700 dark:text-brand-300 shadow-xs'
+              : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+          }`}
+        >
+          <School size={16} />
+          <span>Classroom Leaderboards</span>
+          {classrooms.length > 0 && (
+            <span className="rounded-full bg-brand-100 dark:bg-brand-950/80 px-2 py-0.2 text-[10px] font-black text-brand-700 dark:text-brand-300">
+              {classrooms.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Classroom-based sub-selector */}
+      {boardSection === 'classroom' && (
+        <>
+          {classrooms.length === 0 ? (
+            <div className="card p-5 space-y-3 dark:border-slate-700 dark:bg-black text-center">
+              <div className="grid h-12 w-12 place-items-center rounded-2xl bg-brand-100 text-brand-700 dark:bg-brand-950 dark:text-brand-300 mx-auto">
+                <School size={24} />
+              </div>
+              <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100">
+                Join a Classroom to View Its Leaderboard
+              </h2>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 max-w-md mx-auto">
+                Each classroom has its own dedicated leaderboard. Enter your teacher's 6-character code below to join and compete with your classmates!
+              </p>
+
+              <form onSubmit={handleQuickJoin} className="flex flex-wrap items-center justify-center gap-2 pt-2 max-w-sm mx-auto">
+                <input
+                  type="text"
+                  maxLength={10}
+                  placeholder="Code (e.g. DUL482)"
+                  value={quickCode}
+                  onChange={(e) => setQuickCode(e.target.value.toUpperCase())}
+                  className="input !py-2 !px-3 font-mono font-black text-sm uppercase text-center w-40"
+                  disabled={quickJoining}
+                />
+                <button
+                  type="submit"
+                  disabled={quickJoining || !quickCode.trim()}
+                  className="btn btn-primary !py-2 !px-4 text-xs sm:text-sm font-black inline-flex items-center gap-1.5"
+                >
+                  <Plus size={15} />
+                  <span>{quickJoining ? 'Joining…' : 'Join Classroom'}</span>
+                </button>
+              </form>
+
+              {quickMsg && (
+                <p
+                  role="alert"
+                  className={`mt-2 text-xs font-bold p-2 rounded-xl inline-block ${
+                    quickMsg.ok
+                      ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300'
+                      : 'bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-950/70 dark:text-rose-300'
+                  }`}
+                >
+                  {quickMsg.text}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Classroom selector buttons */}
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-500 mr-1">
+                  Classrooms:
+                </span>
+                {classrooms.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setSelectedClassroomId(c.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-1.5 ${
+                      selectedClassroomId === c.id
+                        ? 'bg-brand-600 text-white shadow-xs'
+                        : 'bg-white dark:bg-black text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:border-brand-300'
+                    }`}
+                  >
+                    <School size={13} />
+                    <span>{c.name}</span>
+                    <span className="opacity-80 text-[11px]">({c.studentCount})</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Classroom Header Banner */}
+              {data?.classroom && (
+                <div className="card p-3.5 sm:p-4 bg-gradient-to-r from-brand-50/90 via-indigo-50/70 to-purple-50/80 dark:from-slate-900 dark:via-brand-950/40 dark:to-slate-900 border border-brand-200 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-md bg-brand-100 dark:bg-brand-950 px-2 py-0.5 text-[10px] font-black uppercase text-brand-800 dark:text-brand-300">
+                        Classroom Leaderboard
+                      </span>
+                      <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100">
+                        {data.classroom.name}
+                      </h2>
+                    </div>
+                    <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+                      Teacher: <strong>{data.classroom.teacherName}</strong> · Scoped to {data.classroom.totalStudents || data.totalLearners} learners
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[11px] font-black text-slate-500">Code:</span>
+                    <span className="font-mono font-black text-sm tracking-widest px-2.5 py-1 rounded-lg bg-white dark:bg-black border border-brand-200 dark:border-brand-700 text-brand-700 dark:text-brand-300">
+                      {data.classroom.code}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyCode(data.classroom.code)}
+                      className="btn btn-ghost !py-1 !px-2 text-xs font-bold inline-flex items-center gap-1 cursor-pointer"
+                      title="Copy join code"
+                    >
+                      {copied ? <Check size={13} className="text-emerald-600" /> : <Copy size={13} />}
+                      <span>{copied ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
       )}
 
+      {/* Time Period Filter Switcher */}
       <div className="grid grid-cols-2 gap-2" role="tablist">
         {[['week', 'This week'], ['all', 'All time']].map(([v, l]) => (
           <button
@@ -122,6 +324,7 @@ export default function Leaderboard() {
         ))}
       </div>
 
+      {/* Leaderboard Rows Rendering */}
       {!data ? (
         <Loading />
       ) : (
@@ -142,62 +345,93 @@ export default function Leaderboard() {
             </motion.div>
           )}
 
-          {data.rows.length === 0 && (
+          {data.rows.length === 0 ? (
             <p className="card p-5 font-bold text-slate-500 text-center dark:border-slate-700 dark:bg-black">
               {data.classroom
-                ? `No XP earned yet in ${data.classroom.name}. Complete a task to become the classroom topper!`
-                : 'No XP earned yet. Be the first!'}
+                ? `No XP recorded in ${data.classroom.name} for this period yet. Complete a task to become the classroom champion!`
+                : 'No XP earned yet. Be the first to start climbing!'}
             </p>
-          )}
-
-          <ol className="space-y-2">
-            {data.rows.map((r, k) => {
-              const isTopper = k === 0;
-              return (
-                <motion.li
-                  key={r.id}
-                  initial={{ x: -15, opacity: 0 }}
-                  animate={{ x: 0, opacity: 1 }}
-                  transition={{ delay: k * 0.03 }}
-                  className={`card flex items-center gap-3 p-3 transition hover:shadow-sm ${
-                    isTopper
-                      ? 'podium-topper !border-amber-400 !bg-amber-50/70 ring-2 ring-amber-300 dark:!border-amber-400/80 dark:ring-2 dark:ring-amber-400/50'
-                      : r.you
-                      ? '!border-brand-500 !bg-brand-50/80 dark:!bg-brand-950/70 dark:!border-brand-400 ring-2 ring-brand-300 dark:ring-brand-500/50'
-                      : ''
-                  }`}
-                >
-                  <RankBadge rank={k + 1} />
-
-                  <div
-                    className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-black ${
+          ) : (
+            <ol className="space-y-2">
+              {data.rows.map((r, k) => {
+                const isTopper = k === 0;
+                return (
+                  <motion.li
+                    key={r.id}
+                    initial={{ x: -15, opacity: 0 }}
+                    animate={{ x: 0, opacity: 1 }}
+                    transition={{ delay: k * 0.03 }}
+                    className={`card flex items-center gap-3 p-3 transition hover:shadow-md ${
                       isTopper
-                        ? 'bg-amber-200 text-amber-900 dark:bg-amber-400/20 dark:text-amber-300 dark:border dark:border-amber-400/40'
-                        : 'bg-brand-200 text-brand-800 dark:bg-brand-900 dark:text-brand-200'
+                        ? 'podium-topper !border-amber-400 ring-2 ring-amber-300 dark:!border-amber-400 dark:ring-2 dark:ring-amber-400 dark:!bg-gradient-to-r dark:!from-purple-900 dark:!via-purple-800 dark:!to-indigo-900 shadow-md dark:shadow-[0_0_24px_rgba(147,51,234,0.5)]'
+                        : r.you
+                        ? '!border-brand-500 !bg-brand-50/80 dark:!bg-brand-950/70 dark:!border-brand-400 ring-2 ring-brand-300 dark:ring-brand-500/50'
+                        : ''
                     }`}
-                    aria-hidden="true"
                   >
-                    {r.name[0]?.toUpperCase()}
-                  </div>
+                    <RankBadge rank={k + 1} />
 
-                  <div className="min-w-0 flex-1 truncate font-black text-slate-800 dark:text-slate-100 text-sm sm:text-base">
-                    {r.name}
-                    {r.you && <span className="ml-1.5 text-xs text-brand-600 dark:text-brand-300 font-extrabold">(You)</span>}
-                  </div>
+                    <div
+                      className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-black shadow-xs ${
+                        isTopper
+                          ? 'bg-amber-300 text-amber-950 ring-2 ring-amber-400/80 font-black'
+                          : 'bg-brand-200 text-brand-800 dark:bg-brand-900 dark:text-brand-200'
+                      }`}
+                      aria-hidden="true"
+                    >
+                      {r.name[0]?.toUpperCase()}
+                    </div>
 
-                  {r.streak > 0 && (
-                    <span className="inline-flex items-center gap-1 text-xs font-black text-amber-600 bg-amber-50 dark:bg-amber-950/60 dark:border-amber-800/70 dark:text-amber-300 px-2 py-1 rounded-full border border-amber-200">
-                      <Flame size={13} className="fill-amber-500 stroke-amber-600 dark:stroke-amber-400" /> {r.streak}d
+                    <div className="min-w-0 flex-1 truncate text-sm sm:text-base font-black">
+                      <span className={isTopper ? 'text-slate-900 dark:!text-white' : 'text-slate-800 dark:text-slate-100'}>
+                        {r.name}
+                      </span>
+                      {r.you && (
+                        <span
+                          className={`ml-1.5 text-xs font-extrabold ${
+                            isTopper ? 'text-amber-900 dark:text-amber-200' : 'text-brand-600 dark:text-brand-300'
+                          }`}
+                        >
+                          (You)
+                        </span>
+                      )}
+                    </div>
+
+                    {r.streak > 0 && (
+                      <span
+                        className={`inline-flex items-center gap-1 text-xs font-black px-2 py-1 rounded-full border ${
+                          isTopper
+                            ? 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-900/80 dark:text-amber-100 dark:border-amber-500'
+                            : 'bg-amber-50 text-amber-600 dark:bg-amber-950/60 dark:border-amber-800/70 dark:text-amber-300 border-amber-200'
+                        }`}
+                      >
+                        <Flame size={13} className="fill-amber-500 stroke-amber-600 dark:stroke-amber-400" />
+                        <span>{r.streak}d</span>
+                      </span>
+                    )}
+
+                    <span
+                      className={`inline-flex items-center gap-1 text-xs sm:text-sm font-black px-2.5 py-1 rounded-full border ${
+                        isTopper
+                          ? 'bg-amber-400/90 text-amber-950 border-amber-500 dark:bg-amber-300 dark:text-amber-950 dark:border-amber-200 shadow-xs'
+                          : 'bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:border-brand-800/70 dark:text-brand-300 border-brand-200'
+                      }`}
+                    >
+                      <Zap
+                        size={14}
+                        className={
+                          isTopper
+                            ? 'fill-amber-950 text-amber-950'
+                            : 'fill-brand-400 stroke-brand-700 dark:stroke-brand-400'
+                        }
+                      />
+                      <span>{r.xp} XP</span>
                     </span>
-                  )}
-
-                  <span className="inline-flex items-center gap-1 text-xs sm:text-sm font-black text-brand-700 bg-brand-50 dark:bg-brand-950/60 dark:border-brand-800/70 dark:text-brand-300 px-2.5 py-1 rounded-full border border-brand-200">
-                    <Zap size={14} className="fill-brand-400 stroke-brand-700 dark:stroke-brand-400" /> {r.xp} XP
-                  </span>
-                </motion.li>
-              );
-            })}
-          </ol>
+                  </motion.li>
+                );
+              })}
+            </ol>
+          )}
         </>
       )}
     </div>

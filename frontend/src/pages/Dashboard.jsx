@@ -22,6 +22,7 @@ import {
   LogOut,
   Plus,
   X,
+  Globe,
 } from 'lucide-react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
@@ -103,12 +104,16 @@ export default function Dashboard() {
   };
 
   const [taskFilter, setTaskFilter] = useState('all'); // 'all' | 'todo' | 'practice'
+  const [selectedClassFilter, setSelectedClassFilter] = useState('all'); // 'all' | classroomId
   const tasks = data?.tasks || [];
   const summary = data?.summary || { done: 0, pending: 0, total: 0, doneToday: 0, totalToday: 0 };
   const u = data?.user || { name: 'Learner', streak: 0, xp: 0, level: 1, xpIntoLevel: 0, badges: [] };
   const allDone = summary.pending === 0;
 
   const filteredTasks = tasks.filter((t) => {
+    if (selectedClassFilter !== 'all') {
+      if (t.classroom?.id !== selectedClassFilter) return false;
+    }
     if (taskFilter === 'todo') return !t.done;
     if (taskFilter === 'practice') return t.done;
     return true;
@@ -599,6 +604,44 @@ export default function Dashboard() {
             </button>
           </div>
         </div>
+
+        {/* Classroom Section Filter for Learner */}
+        {classrooms.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-bold">
+            <span className="text-[11px] font-black uppercase text-slate-400 px-1.5">Class:</span>
+            <button
+              type="button"
+              onClick={() => setSelectedClassFilter('all')}
+              className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                selectedClassFilter === 'all'
+                  ? 'bg-white dark:bg-black text-brand-700 dark:text-brand-300 shadow-2xs font-black'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              <Globe size={13} />
+              <span>All Classes ({tasks.length})</span>
+            </button>
+
+            {classrooms.map((c) => {
+              const count = tasks.filter((t) => t.classroom?.id === c.id).length;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => setSelectedClassFilter(c.id)}
+                  className={`px-2.5 py-1 rounded-lg transition cursor-pointer flex items-center gap-1 ${
+                    selectedClassFilter === c.id
+                      ? 'bg-white dark:bg-black text-brand-700 dark:text-brand-300 shadow-2xs font-black'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                  }`}
+                >
+                  <School size={13} />
+                  <span>{c.name} ({count})</span>
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {tasks.length === 0 && (
           <p className="card p-4 text-center font-bold text-slate-500 dark:text-slate-400 dark:bg-slate-800 dark:border-slate-700">

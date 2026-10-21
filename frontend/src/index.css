@@ -537,15 +537,30 @@ html.dark .recharts-cartesian-grid line {
   stroke: #1f293d !important;
 }
 
-/* Podium Topper - Deep Midnight Violet / Royal Purple #2e1065 at 70% opacity in dark mode */
+/* Podium Topper - Light Mode: Warm Royal Gold */
 .podium-topper {
-  border-color: #fbbf24 !important;
-  background-color: rgba(254, 243, 199, 0.75) !important;
+  border-color: #f59e0b !important;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%) !important;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.25), 0 0 0 2px #fbbf24 !important;
 }
 
-html.dark .podium-topper {
-  background-color: rgba(46, 16, 101, 0.7) !important;
-  border-color: rgba(251, 191, 36, 0.8) !important;
-  box-shadow: 0 4px 14px rgba(46, 16, 101, 0.45), 0 0 0 2px rgba(251, 191, 36, 0.4) !important;
+/* Podium Topper - Dark Mode: Vivid, Luminous Royal Violet & Amethyst with Radiant Gold Outline */
+html.dark .podium-topper,
+html.dark li.podium-topper,
+html.dark .card.podium-topper {
+  background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 50%, #7c3aed 100%) !important;
+  border-color: #fbbf24 !important;
+  box-shadow: 0 0 24px rgba(124, 58, 237, 0.6), 0 6px 20px rgba(0, 0, 0, 0.6), 0 0 0 2.5px #fbbf24 !important;
+  color: #ffffff !important;
+}
+
+html.dark .podium-topper .text-slate-800,
+html.dark .podium-topper .text-slate-900 {
+  color: #ffffff !important;
+}
+
+html.dark .podium-topper .text-slate-600,
+html.dark .podium-topper .text-slate-500 {
+  color: #f3e8ff !important;
 }
 

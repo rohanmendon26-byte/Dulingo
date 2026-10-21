@@ -178,14 +178,15 @@ router.post('/teacher/tasks', ...teacher, wrap(async (req, res) => {
     .filter((f) => f.label && f.answer);
   if (b.type === 'mock_form' && fields.length < 2) return res.status(400).json({ error: 'Add at least 2 form fields, each with a label and correct value' });
 
-  let classroomId = null;
-  if (b.classroom && b.classroom !== 'all' && b.classroom !== '') {
-    const cls = await Classroom.findOne({ _id: b.classroom, teacher: req.user._id, active: true });
-    if (!cls) {
-      return res.status(400).json({ error: 'Selected classroom not found or does not belong to you' });
-    }
-    classroomId = cls._id;
+  if (!b.classroom || b.classroom === 'all' || b.classroom === 'public' || String(b.classroom).trim() === '') {
+    return res.status(400).json({ error: 'Classroom is required. Teachers cannot publish public tasks; please select which classroom to publish this task to.' });
   }
+
+  const cls = await Classroom.findOne({ _id: b.classroom, teacher: req.user._id, active: true });
+  if (!cls) {
+    return res.status(400).json({ error: 'Selected classroom not found or does not belong to you. Please select a valid classroom.' });
+  }
+  const classroomId = cls._id;
 
   const task = await Task.create({
     fields: b.type === 'mock_form' ? fields : [],
