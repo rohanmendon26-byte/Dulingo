@@ -11,8 +11,8 @@ router.get('/tasks/today', requireAuth, wrap(async (req, res) => {
   const today = todayIST();
   let taskFilter = { assignedDate: { $lte: today } };
 
-  if (req.user.role === 'student') {
-    // Students only receive tasks for classrooms they are enrolled in (+ public civic tasks)
+  if (req.user.role === 'student' || req.user.role === 'senior') {
+    // Learners & seniors receive tasks for enrolled classrooms (+ public civic tasks)
     const enrolled = await Classroom.find({ students: req.user._id, active: true }).select('_id');
     const enrolledIds = enrolled.map((c) => c._id);
     taskFilter = {
