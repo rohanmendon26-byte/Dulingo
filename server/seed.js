@@ -10,18 +10,6 @@ await Promise.all([User, Task, Submission, Story, XpLog, Announcement].map((m) =
 
 const hash = await bcrypt.hash('demo1234', 10);
 const teacher = await User.create({ name: 'Priya Teacher', email: 'teacher@dulingo.in', passwordHash: hash, role: 'teacher' });
-const senior = await User.create({
-  name: 'Dadaji Sharma',
-  email: 'senior@dulingo.in',
-  passwordHash: hash,
-  role: 'senior',
-  xp: 180,
-  streak: 4,
-  bestStreak: 4,
-  lastActiveDate: todayIST(),
-  badges: ['first_steps', 'century', 'on_fire'],
-});
-await XpLog.create({ user: senior._id, amount: 100, reason: 'seed' });
 
 const demo = [
   ['Ramesh Kumar', 'ramesh@dulingo.in', 340, 5],

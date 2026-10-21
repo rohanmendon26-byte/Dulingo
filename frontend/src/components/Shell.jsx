@@ -12,7 +12,6 @@ import {
   WifiOff,
   Moon,
   Sun,
-  HeartHandshake,
 } from 'lucide-react';
 import { useAuth } from '../context/index.js';
 import { useOnlineStatus } from '../hooks/index.js';
@@ -34,12 +33,6 @@ export function Shell({ children }) {
           { to: '/teacher', label: 'Teacher Hub', icon: GraduationCap },
           { to: '/leaderboard', label: 'Leaderboard', icon: Trophy },
         ]
-      : user?.role === 'senior'
-      ? [
-          { to: '/senior', label: 'Senior Companion', icon: HeartHandshake },
-          { to: '/stories', label: 'Civic Stories', icon: BookOpen },
-          { to: '/leaderboard', label: 'Leaderboard', icon: Trophy },
-        ]
       : [
           { to: '/dashboard', label: 'Learn', icon: Home },
           { to: '/stories', label: 'Stories', icon: BookOpen },
@@ -58,24 +51,11 @@ export function Shell({ children }) {
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/85 backdrop-blur-md shadow-2xs dark:bg-slate-900/90 dark:border-slate-700/60">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-3 px-3.5 py-2.5 sm:px-6">
           <Link
-            to={
-              user
-                ? user.role === 'teacher'
-                  ? '/teacher'
-                  : user.role === 'senior'
-                  ? '/senior'
-                  : '/dashboard'
-                : '/'
-            }
+            to={user ? (user.role === 'teacher' ? '/teacher' : '/dashboard') : '/'}
             className="flex items-center gap-2.5 transition hover:opacity-90"
           >
             <Octo size={36} />
-            <div className="flex flex-col">
-              <span className="text-xl sm:text-2xl font-black tracking-tight text-brand-700 leading-tight">Dulingo</span>
-              {user?.role === 'senior' && (
-                <span className="text-[10.5px] font-black tracking-wide text-amber-700 dark:text-amber-400 uppercase leading-none">Senior Mode 🧓</span>
-              )}
-            </div>
+            <span className="text-xl sm:text-2xl font-black tracking-tight text-brand-700">Dulingo</span>
           </Link>
 
           {/* Desktop Nav */}

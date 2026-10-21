@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { GraduationCap, School, LogIn, UserPlus, User, AlertCircle, HeartHandshake } from 'lucide-react';
+import { GraduationCap, School, LogIn, UserPlus, User, AlertCircle } from 'lucide-react';
 import { useAuth } from '../auth.jsx';
 import { Octo, Shell } from '../components.jsx';
 
@@ -13,18 +13,12 @@ export default function AuthPage({ mode }) {
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
-  const getTargetRoute = (role) => {
-    if (role === 'teacher') return '/teacher';
-    if (role === 'senior') return '/senior';
-    return '/dashboard';
-  };
-
   const submit = async (e) => {
     e.preventDefault();
     setErr(''); setBusy(true);
     try {
       const u = await login(isReg ? '/auth/register' : '/auth/login', f);
-      nav(getTargetRoute(u.role));
+      nav(u.role === 'teacher' ? '/teacher' : '/dashboard');
     } catch (x) { setErr(x.message); } finally { setBusy(false); }
   };
 
@@ -32,7 +26,7 @@ export default function AuthPage({ mode }) {
     setErr(''); setBusy(true);
     try {
       const u = await login('/auth/login', { email, password: 'demo1234' });
-      nav(getTargetRoute(u.role));
+      nav(u.role === 'teacher' ? '/teacher' : '/dashboard');
     } catch (x) { setErr(x.message); } finally { setBusy(false); }
   };
 
@@ -89,11 +83,10 @@ export default function AuthPage({ mode }) {
 
           {isReg && (
             <fieldset>
-              <legend className="text-xs sm:text-sm font-extrabold text-slate-700 mb-1.5">I am registering as</legend>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <legend className="text-xs sm:text-sm font-extrabold text-slate-700 mb-1">I am a</legend>
+              <div className="grid grid-cols-2 gap-2">
                 {[
                   ['student', 'Learner', GraduationCap],
-                  ['senior', 'Senior Citizen', HeartHandshake],
                   ['teacher', 'Teacher', School],
                 ].map(([v, l, IconComp]) => (
                   <button
@@ -110,11 +103,6 @@ export default function AuthPage({ mode }) {
                   </button>
                 ))}
               </div>
-              {f.role === 'senior' && (
-                <p className="mt-2 text-xs font-bold text-brand-700 bg-brand-50 border border-brand-200/80 rounded-xl p-2.5">
-                  🧓 <strong>Senior Safe Companion:</strong> Extra-large readable letters, voice read-aloud guidance, and stress-free simulations for Digital Life Certificates, Pension statements, and Aadhaar services.
-                </p>
-              )}
             </fieldset>
           )}
 
@@ -167,13 +155,6 @@ export default function AuthPage({ mode }) {
               >
                 <User size={13} className="text-brand-600" />
                 <span>Demo learner</span>
-              </button>
-              <button
-                className="btn btn-ghost !py-1.5 !px-3 text-xs inline-flex items-center gap-1.5"
-                onClick={() => demo('senior@dulingo.in')}
-              >
-                <HeartHandshake size={13} className="text-brand-600" />
-                <span>Demo Senior</span>
               </button>
               <button
                 className="btn btn-ghost !py-1.5 !px-3 text-xs inline-flex items-center gap-1.5"

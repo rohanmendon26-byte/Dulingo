@@ -7,7 +7,7 @@ const userSchema = new Schema(
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
-    role: { type: String, enum: ['student', 'teacher', 'senior'], default: 'student' },
+    role: { type: String, enum: ['student', 'teacher'], default: 'student' },
     xp: { type: Number, default: 0 },
     streak: { type: Number, default: 0 },
     bestStreak: { type: Number, default: 0 },
