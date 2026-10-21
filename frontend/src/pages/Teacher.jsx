@@ -25,6 +25,10 @@ import {
   Megaphone,
   Pin,
   AlertTriangle,
+  School,
+  Copy,
+  Check,
+  UserCheck,
 } from 'lucide-react';
 import {
   BarChart,
@@ -53,6 +57,7 @@ const blankTask = {
   answer: '',
   explanation: '',
   xp: 10,
+  classroom: '',
   fields: [
     { label: '', answer: '', hint: '' },
     { label: '', answer: '', hint: '' },
@@ -211,11 +216,24 @@ const QUICK_PROMPTS = [
   'CPGRAMS Grievance',
 ];
 
-function TaskForm({ onSaved }) {
-  const [f, setF] = useState(blankTask);
+function TaskForm({ onSaved, initialClassroomId = '' }) {
+  const [f, setF] = useState({ ...blankTask, classroom: initialClassroomId || '' });
+  const [classrooms, setClassrooms] = useState([]);
   const [translations, setTranslations] = useState({ hi: {}, kn: {} });
   const [showTr, setShowTr] = useState(false);
   const [msg, setMsg] = useState(null);
+
+  useEffect(() => {
+    api('/classrooms/my')
+      .then((res) => setClassrooms(res.classrooms || []))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (initialClassroomId) {
+      setF((prev) => ({ ...prev, classroom: initialClassroomId }));
+    }
+  }, [initialClassroomId]);
 
   // AI Task Drafting state
   const [aiTopic, setAiTopic] = useState('');
@@ -422,6 +440,27 @@ function TaskForm({ onSaved }) {
           </select>
         </label>
         <label className="font-extrabold text-xs sm:text-sm">XP reward<input className="input mt-1" type="number" min="1" max="100" value={f.xp} onChange={set('xp')} /></label>
+
+        <label className="font-extrabold text-xs sm:text-sm sm:col-span-2">
+          Target Audience (Classroom Scoping)
+          <select
+            className="input mt-1 font-bold bg-brand-50/70 border-brand-200 dark:bg-slate-900 dark:border-slate-700"
+            value={f.classroom || ''}
+            onChange={set('classroom')}
+          >
+            <option value="">🌐 Public (All Learners on Platform)</option>
+            {classrooms.map((c) => (
+              <option key={c.id} value={c.id}>
+                🏫 {c.name} (Code: {c.code}) · {c.studentCount} enrolled learners
+              </option>
+            ))}
+          </select>
+          <span className="text-[11px] font-semibold text-slate-500 mt-1 block">
+            {f.classroom
+              ? 'Only learners enrolled in this specific classroom will receive this task on their dashboard.'
+              : 'Public tasks are visible to all learners across the platform.'}
+          </span>
+        </label>
       </div>
 
       <label className="block font-extrabold text-xs sm:text-sm">Question / instruction
@@ -962,11 +1001,316 @@ function AnnouncementsManager() {
   );
 }
 
+function ClassroomsManager({ onSelectClassForTask }) {
+  const [classrooms, setClassrooms] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [name, setName] = useState('');
+  const [subject, setSubject] = useState('Civic Literacy');
+  const [description, setDescription] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [msg, setMsg] = useState(null);
+  const [copiedId, setCopiedId] = useState(null);
+  const [expandedRosterId, setExpandedRosterId] = useState(null);
+
+  const fetchClassrooms = async () => {
+    try {
+      const res = await api('/classrooms/my');
+      setClassrooms(res.classrooms || []);
+    } catch (e) {
+      console.warn(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchClassrooms();
+  }, []);
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    setCreating(true);
+    setMsg(null);
+    try {
+      const res = await api('/classrooms', {
+        method: 'POST',
+        body: { name: name.trim(), subject: subject.trim(), description: description.trim() },
+      });
+      setMsg({ ok: true, text: res.message || `Classroom "${name}" created!` });
+      setName('');
+      setDescription('');
+      fetchClassrooms();
+      setTimeout(() => setMsg(null), 5000);
+    } catch (err) {
+      setMsg({ ok: false, text: err.message });
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const handleCopyCode = (code, id) => {
+    navigator.clipboard.writeText(code);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2500);
+  };
+
+  const handleDelete = async (id, cName) => {
+    if (!confirm(`Delete "${cName}"? Students will be unlinked and questions will become public.`)) return;
+    try {
+      await api(`/classrooms/${id}`, { method: 'DELETE' });
+      setClassrooms((prev) => prev.filter((c) => c.id !== id));
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Create Classroom Form Card */}
+      <form onSubmit={handleCreate} className="card p-4 sm:p-5 space-y-4 dark:border-slate-700 dark:bg-black">
+        <div className="flex items-center gap-2 border-b border-brand-50 dark:border-slate-800 pb-2.5">
+          <School size={20} className="text-brand-600 dark:text-brand-400" />
+          <div>
+            <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-slate-100">
+              Create a New Classroom
+            </h2>
+            <p className="text-xs font-semibold text-slate-500">
+              Each classroom gets a 6-character code. Only learners who join with this code receive your published questions.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300">
+            Classroom / Section Name
+            <input
+              className="input mt-1 !text-xs sm:!text-sm"
+              placeholder="e.g. Grade 10-A Civics, Batch 2026..."
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </label>
+
+          <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300">
+            Subject / Domain
+            <input
+              className="input mt-1 !text-xs sm:!text-sm font-bold"
+              placeholder="e.g. Civic Literacy, Digital Governance..."
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+            />
+          </label>
+        </div>
+
+        <label className="block text-xs font-extrabold text-slate-600 dark:text-slate-300">
+          Description (Optional)
+          <textarea
+            className="input mt-1 min-h-16 !text-xs sm:!text-sm"
+            placeholder="e.g. Classroom for civic engagement lessons, welfare schemes, and student quizzes."
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </label>
+
+        <div className="flex justify-end pt-1">
+          <button
+            type="submit"
+            disabled={creating || !name.trim()}
+            className="btn btn-primary !py-2 !px-5 text-xs sm:text-sm font-black inline-flex items-center gap-1.5 shadow-sm"
+          >
+            <Plus size={15} />
+            <span>{creating ? 'Creating Classroom...' : 'Create Classroom'}</span>
+          </button>
+        </div>
+
+        {msg && (
+          <p
+            role="alert"
+            className={`flex items-center gap-2 rounded-xl p-3 text-xs sm:text-sm font-bold ${
+              msg.ok
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800'
+                : 'bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800'
+            }`}
+          >
+            {msg.ok ? <CheckCircle2 size={16} /> : <X size={16} />}
+            <span>{msg.text}</span>
+          </p>
+        )}
+      </form>
+
+      {/* Classroom List */}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <School size={18} className="text-brand-600 dark:text-brand-400" />
+            <span>Your Classrooms ({classrooms.length})</span>
+          </h3>
+          <span className="text-xs font-bold text-slate-500">
+            Share code with learners to enroll
+          </span>
+        </div>
+
+        {loading ? (
+          <Loading />
+        ) : classrooms.length === 0 ? (
+          <p className="card p-5 text-center font-bold text-slate-500 dark:text-slate-400 dark:border-slate-700 dark:bg-black">
+            You haven't created any classrooms yet. Create your first classroom above to start scoping questions and leaderboards!
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {classrooms.map((c) => {
+              const isRosterOpen = expandedRosterId === c.id;
+              const hasStudents = c.students && c.students.length > 0;
+              return (
+                <div
+                  key={c.id}
+                  className="card p-4 sm:p-5 space-y-3 transition hover:shadow-xs dark:border-slate-700 dark:bg-black"
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-brand-50 dark:border-slate-800 pb-3">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="rounded-md bg-brand-100 px-2 py-0.5 text-[11px] font-black uppercase text-brand-800 dark:bg-brand-950/80 dark:text-brand-300">
+                          {c.subject}
+                        </span>
+                        <h4 className="font-black text-base sm:text-lg text-slate-900 dark:text-slate-100">
+                          {c.name}
+                        </h4>
+                      </div>
+                      {c.description && (
+                        <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">{c.description}</p>
+                      )}
+                    </div>
+
+                    {/* Join Code Callout */}
+                    <div className="flex items-center gap-2.5 bg-gradient-to-r from-brand-50 to-indigo-50 dark:from-brand-950/50 dark:to-indigo-950/40 p-2.5 rounded-2xl border border-brand-200 dark:border-brand-800">
+                      <div>
+                        <span className="text-[10px] uppercase font-black tracking-wider text-slate-500 dark:text-slate-400 block">
+                          Join Code
+                        </span>
+                        <span className="text-lg sm:text-xl font-black font-mono tracking-widest text-brand-700 dark:text-brand-300">
+                          {c.code}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyCode(c.code, c.id)}
+                        className={`btn !py-1.5 !px-3 text-xs font-black inline-flex items-center gap-1.5 rounded-xl cursor-pointer ${
+                          copiedId === c.id
+                            ? 'bg-emerald-600 text-white'
+                            : 'btn-ghost'
+                        }`}
+                        title="Copy classroom join code"
+                      >
+                        {copiedId === c.id ? <Check size={14} /> : <Copy size={14} />}
+                        <span>{copiedId === c.id ? 'Copied!' : 'Copy Code'}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Actions & Stats */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
+                    <div className="flex items-center gap-3">
+                      <span className="inline-flex items-center gap-1.5 font-black text-slate-700 dark:text-slate-300">
+                        <Users size={15} className="text-brand-600" />
+                        <span>{c.studentCount} enrolled {c.studentCount === 1 ? 'learner' : 'learners'}</span>
+                      </span>
+
+                      {c.studentCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setExpandedRosterId(isRosterOpen ? null : c.id)}
+                          className="font-extrabold text-brand-700 hover:text-brand-900 dark:text-brand-400 dark:hover:text-brand-300 inline-flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>{isRosterOpen ? 'Hide Roster' : 'View Roster'}</span>
+                          {isRosterOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onSelectClassForTask(c.id)}
+                        className="btn btn-primary !py-1 !px-3 text-xs font-black inline-flex items-center gap-1 cursor-pointer"
+                      >
+                        <PlusCircle size={13} />
+                        <span>Publish Task for this Class</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(c.id, c.name)}
+                        className="btn btn-ghost !py-1 !px-2.5 text-xs text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-900/60 dark:hover:bg-rose-950/60 inline-flex items-center gap-1 cursor-pointer"
+                        title="Delete classroom"
+                      >
+                        <Trash2 size={13} />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Expandable Student Roster */}
+                  {isRosterOpen && (
+                    <div className="mt-3 rounded-2xl bg-slate-50 dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 p-3 space-y-2">
+                      <h5 className="text-xs font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                        <UserCheck size={14} className="text-brand-600" />
+                        <span>Enrolled Learners Roster ({c.students?.length || 0})</span>
+                      </h5>
+                      {!hasStudents ? (
+                        <p className="text-xs text-slate-500 font-semibold">
+                          No students have joined yet. Share the code <strong>{c.code}</strong> with your students!
+                        </p>
+                      ) : (
+                        <div className="divide-y divide-slate-200 dark:divide-slate-800">
+                          {c.students.map((st) => (
+                            <div key={st.id} className="flex items-center justify-between py-2 text-xs">
+                              <div>
+                                <p className="font-black text-slate-900 dark:text-slate-100">{st.name}</p>
+                                <p className="text-[11px] text-slate-500">{st.email}</p>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <span className="inline-flex items-center gap-1 font-extrabold text-amber-600">
+                                  <Flame size={13} className="fill-amber-500" /> {st.streak}d
+                                </span>
+                                <span className="inline-flex items-center gap-1 font-black text-brand-700 dark:text-brand-300">
+                                  <Zap size={13} className="fill-brand-400" /> {st.xp} XP
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
 export default function Teacher() {
   const [tab, setTab] = useState('overview');
   const [data, setData] = useState(null);
-  const load = () => api('/teacher/overview').then(setData);
+  const [targetClassroomId, setTargetClassroomId] = useState('');
+  const [overviewClassFilter, setOverviewClassFilter] = useState('');
+
+  const load = (classId = overviewClassFilter) => {
+    const url = classId ? `/teacher/overview?classroomId=${classId}` : '/teacher/overview';
+    return api(url).then(setData);
+  };
+
   useEffect(() => { load(); }, []);
+
+  const handleSelectClassForTask = (classroomId) => {
+    setTargetClassroomId(classroomId);
+    setTab('task');
+  };
 
   const remove = async (id) => {
     if (!confirm('Delete this task? Learners\' answers for it will also be removed.')) return;
@@ -975,6 +1319,7 @@ export default function Teacher() {
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'classrooms', label: 'Classrooms', icon: School },
     { id: 'task', label: 'New task', icon: PlusCircle },
     { id: 'story', label: 'New story', icon: BookOpen },
     { id: 'announcements', label: 'Announcements', icon: Megaphone },
@@ -989,12 +1334,12 @@ export default function Teacher() {
         <div>
           <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Teacher Hub</h1>
           <p className="text-xs sm:text-sm font-semibold text-slate-600">
-            Publish interactive lessons, broadcast announcements, draft with AI, and review student essays
+            Create classrooms, publish scoped lessons, broadcast announcements, and review student essays
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="tablist">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2" role="tablist">
         {tabs.map((t) => {
           const IconComp = t.icon;
           return (
@@ -1014,12 +1359,44 @@ export default function Teacher() {
         })}
       </div>
 
-      {tab === 'task' && <TaskForm onSaved={load} />}
+      {tab === 'classrooms' && <ClassroomsManager onSelectClassForTask={handleSelectClassForTask} />}
+      {tab === 'task' && <TaskForm onSaved={load} initialClassroomId={targetClassroomId} />}
       {tab === 'story' && <StoryForm />}
       {tab === 'announcements' && <AnnouncementsManager />}
 
       {tab === 'overview' && (!data ? <Loading /> : (
         <div className="space-y-6">
+          {/* Classroom Scope Filter */}
+          <div className="card p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 dark:border-slate-700 dark:bg-black">
+            <div>
+              <h2 className="text-sm sm:text-base font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <School size={17} className="text-brand-600 dark:text-brand-400" />
+                <span>Classroom Scope</span>
+              </h2>
+              <p className="text-xs font-semibold text-slate-500">
+                Filter overview metrics, leaderboard, and tasks by specific classroom
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                className="input !py-1.5 !px-3 !text-xs sm:!text-sm font-bold w-auto"
+                value={overviewClassFilter}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setOverviewClassFilter(val);
+                  load(val);
+                }}
+              >
+                <option value="">🌐 All Classrooms & Public ({data.classrooms?.length || 0} classes)</option>
+                {(data.classrooms || []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    🏫 {c.name} ({c.studentCount} learners)
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           {/* ── Analytics Section ── */}
           {data.students.length > 0 && (() => {
             const totalXP = data.students.reduce((s, st) => s + (st.xp || 0), 0);
@@ -1153,7 +1530,18 @@ export default function Teacher() {
                 <div key={t.id} className="card flex items-center gap-3 p-3 transition hover:shadow-xs">
                   <TopicBadge topic={t.topic} size="md" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-black text-slate-900 text-sm sm:text-base">{t.title}</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <p className="truncate font-black text-slate-900 text-sm sm:text-base">{t.title}</p>
+                      {t.classroom ? (
+                        <span className="rounded-md bg-brand-100 text-brand-800 dark:bg-brand-950/80 dark:text-brand-300 text-[10px] font-black px-2 py-0.5 border border-brand-200 dark:border-brand-800">
+                          🏫 {t.classroom.name}
+                        </span>
+                      ) : (
+                        <span className="rounded-md bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 text-[10px] font-bold px-2 py-0.5">
+                          🌐 Public
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs font-bold text-slate-500">{TYPE_LABEL[t.type]} · {t.assignedDate} · {t.xp} XP</p>
                   </div>
                   <button

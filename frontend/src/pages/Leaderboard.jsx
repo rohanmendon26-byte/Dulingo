@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Trophy, Crown, Medal, Flame, Zap, Sparkles } from 'lucide-react';
+import { Trophy, Crown, Medal, Flame, Zap, Sparkles, School, Globe, Users } from 'lucide-react';
 import { api } from '../api.js';
 import { Loading } from '../components.jsx';
 
@@ -36,8 +36,26 @@ function RankBadge({ rank }) {
 export default function Leaderboard() {
   const [period, setPeriod] = useState('week');
   const [data, setData] = useState(null);
+  const [classrooms, setClassrooms] = useState([]);
+  const [selectedClassroomId, setSelectedClassroomId] = useState('');
 
-  useEffect(() => { setData(null); api(`/leaderboard?period=${period}`).then(setData); }, [period]);
+  useEffect(() => {
+    api('/classrooms/my')
+      .then((res) => {
+        const list = res.classrooms || [];
+        setClassrooms(list);
+        if (list.length > 0 && !selectedClassroomId) {
+          setSelectedClassroomId(list[0].id);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    setData(null);
+    const q = selectedClassroomId ? `&classroomId=${selectedClassroomId}` : '';
+    api(`/leaderboard?period=${period}${q}`).then(setData);
+  }, [period, selectedClassroomId]);
 
   return (
     <div className="mx-auto max-w-2xl space-y-4">
@@ -46,10 +64,49 @@ export default function Leaderboard() {
           <Trophy size={24} />
         </div>
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900">Leaderboard</h1>
-          <p className="text-xs sm:text-sm font-semibold text-slate-600">See who has earned the most XP this week</p>
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-slate-100">
+            {data?.classroom ? `${data.classroom.name} Leaderboard` : 'Leaderboard'}
+          </h1>
+          <p className="text-xs sm:text-sm font-semibold text-slate-600 dark:text-slate-300">
+            {data?.classroom
+              ? `${data.classroom.totalStudents || data.totalLearners} learners in this classroom · Code: ${data.classroom.code}`
+              : 'See who has earned the most XP across the platform'}
+          </p>
         </div>
       </div>
+
+      {/* Classroom Scope Switcher Pills */}
+      {classrooms.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          {classrooms.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              onClick={() => setSelectedClassroomId(c.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-1.5 ${
+                selectedClassroomId === c.id
+                  ? 'bg-white dark:bg-black text-brand-700 dark:text-brand-300 shadow-2xs'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+              }`}
+            >
+              <School size={14} />
+              <span>{c.name} ({c.studentCount} learners)</span>
+            </button>
+          ))}
+          <button
+            type="button"
+            onClick={() => setSelectedClassroomId('')}
+            className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-black transition cursor-pointer flex items-center gap-1.5 ${
+              !selectedClassroomId
+                ? 'bg-white dark:bg-black text-brand-700 dark:text-brand-300 shadow-2xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900'
+            }`}
+          >
+            <Globe size={14} />
+            <span>All Learners (Global)</span>
+          </button>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2" role="tablist">
         {[['week', 'This week'], ['all', 'All time']].map(([v, l]) => (
@@ -77,13 +134,20 @@ export default function Leaderboard() {
             >
               <Sparkles size={18} className="text-brand-600 dark:text-brand-400" />
               <span>
-                You are ranked #{data.myRank} {data.myRank === 1 ? '— Podium topper! 👑' : data.myRank <= 3 ? '— Podium spot!' : '— Keep answering to climb!'}
+                {data.classroom
+                  ? `You are ranked #${data.myRank} out of ${data.classroom.totalStudents || data.totalLearners} in ${data.classroom.name}!`
+                  : `You are ranked #${data.myRank} on the global leaderboard!`}
+                {data.myRank === 1 ? ' 👑 Podium topper!' : data.myRank <= 3 ? ' — Podium spot!' : ''}
               </span>
             </motion.div>
           )}
 
           {data.rows.length === 0 && (
-            <p className="card p-5 font-bold text-slate-500 text-center">No XP earned yet. Be the first!</p>
+            <p className="card p-5 font-bold text-slate-500 text-center dark:border-slate-700 dark:bg-black">
+              {data.classroom
+                ? `No XP earned yet in ${data.classroom.name}. Complete a task to become the classroom topper!`
+                : 'No XP earned yet. Be the first!'}
+            </p>
           )}
 
           <ol className="space-y-2">
@@ -97,7 +161,7 @@ export default function Leaderboard() {
                   transition={{ delay: k * 0.03 }}
                   className={`card flex items-center gap-3 p-3 transition hover:shadow-sm ${
                     isTopper
-                      ? 'podium-topper !border-amber-400 !bg-amber-50/70 ring-2 ring-amber-300 dark:!bg-brand-950/70 dark:!border-amber-400/80 dark:ring-2 dark:ring-amber-400/50'
+                      ? 'podium-topper !border-amber-400 !bg-amber-50/70 ring-2 ring-amber-300 dark:!border-amber-400/80 dark:ring-2 dark:ring-amber-400/50'
                       : r.you
                       ? '!border-brand-500 !bg-brand-50/80 dark:!bg-brand-950/70 dark:!border-brand-400 ring-2 ring-brand-300 dark:ring-brand-500/50'
                       : ''
@@ -113,26 +177,26 @@ export default function Leaderboard() {
                     }`}
                     aria-hidden="true"
                   >
-                  {r.name[0]?.toUpperCase()}
-                </div>
+                    {r.name[0]?.toUpperCase()}
+                  </div>
 
-                <div className="min-w-0 flex-1 truncate font-black text-slate-800 dark:text-slate-100 text-sm sm:text-base">
-                  {r.name}
-                  {r.you && <span className="ml-1.5 text-xs text-brand-600 dark:text-brand-300 font-extrabold">(You)</span>}
-                </div>
+                  <div className="min-w-0 flex-1 truncate font-black text-slate-800 dark:text-slate-100 text-sm sm:text-base">
+                    {r.name}
+                    {r.you && <span className="ml-1.5 text-xs text-brand-600 dark:text-brand-300 font-extrabold">(You)</span>}
+                  </div>
 
-                {r.streak > 0 && (
-                  <span className="inline-flex items-center gap-1 text-xs font-black text-amber-600 bg-amber-50 dark:bg-amber-950/60 dark:border-amber-800/70 dark:text-amber-300 px-2 py-1 rounded-full border border-amber-200">
-                    <Flame size={13} className="fill-amber-500 stroke-amber-600 dark:stroke-amber-400" /> {r.streak}d
+                  {r.streak > 0 && (
+                    <span className="inline-flex items-center gap-1 text-xs font-black text-amber-600 bg-amber-50 dark:bg-amber-950/60 dark:border-amber-800/70 dark:text-amber-300 px-2 py-1 rounded-full border border-amber-200">
+                      <Flame size={13} className="fill-amber-500 stroke-amber-600 dark:stroke-amber-400" /> {r.streak}d
+                    </span>
+                  )}
+
+                  <span className="inline-flex items-center gap-1 text-xs sm:text-sm font-black text-brand-700 bg-brand-50 dark:bg-brand-950/60 dark:border-brand-800/70 dark:text-brand-300 px-2.5 py-1 rounded-full border border-brand-200">
+                    <Zap size={14} className="fill-brand-400 stroke-brand-700 dark:stroke-brand-400" /> {r.xp} XP
                   </span>
-                )}
-
-                <span className="inline-flex items-center gap-1 text-xs sm:text-sm font-black text-brand-700 bg-brand-50 dark:bg-brand-950/60 dark:border-brand-800/70 dark:text-brand-300 px-2.5 py-1 rounded-full border border-brand-200">
-                  <Zap size={14} className="fill-brand-400 stroke-brand-700 dark:stroke-brand-400" /> {r.xp} XP
-                </span>
-              </motion.li>
-            );
-          })}
+                </motion.li>
+              );
+            })}
           </ol>
         </>
       )}

@@ -16,6 +16,7 @@ const userSchema = new Schema(
     freezeUsedDate: { type: String, default: '' }, // YYYY-MM-DD of when freeze was consumed
     badges: { type: [String], default: [] },
     storiesRead: { type: [Schema.Types.ObjectId], default: [] },
+    classrooms: [{ type: Schema.Types.ObjectId, ref: 'Classroom' }],
   },
   { timestamps: true }
 );

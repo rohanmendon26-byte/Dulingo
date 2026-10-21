@@ -1,5 +1,5 @@
 import express from 'express';
-import { Task, Submission } from '../models/index.js';
+import { Task, Submission, Classroom } from '../models/index.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { award, publicUser, todayIST, levelFor, BADGE_LABELS } from '../services/gameService.js';
 import { matches, isCorrect } from '../utils/stringUtils.js';
@@ -9,7 +9,36 @@ const router = express.Router();
 
 router.get('/tasks/today', requireAuth, wrap(async (req, res) => {
   const today = todayIST();
-  const tasks = await Task.find({ assignedDate: { $lte: today } }).sort({ assignedDate: -1, createdAt: 1 }).limit(40);
+  let taskFilter = { assignedDate: { $lte: today } };
+
+  if (req.user.role === 'student') {
+    // Students only receive tasks for classrooms they are enrolled in (+ public civic tasks)
+    const enrolled = await Classroom.find({ students: req.user._id, active: true }).select('_id');
+    const enrolledIds = enrolled.map((c) => c._id);
+    taskFilter = {
+      assignedDate: { $lte: today },
+      $or: [
+        { classroom: { $in: enrolledIds } },
+        { classroom: null },
+      ],
+    };
+  } else if (req.user.role === 'teacher') {
+    const teacherClasses = await Classroom.find({ teacher: req.user._id }).select('_id');
+    const teacherClassIds = teacherClasses.map((c) => c._id);
+    taskFilter = {
+      assignedDate: { $lte: today },
+      $or: [
+        { classroom: { $in: teacherClassIds } },
+        { createdBy: req.user._id },
+        { classroom: null },
+      ],
+    };
+  }
+
+  const tasks = await Task.find(taskFilter)
+    .populate('classroom', 'name code')
+    .sort({ assignedDate: -1, createdAt: 1 })
+    .limit(50);
   const subs = await Submission.find({ user: req.user._id, task: { $in: tasks.map((t) => t._id) } });
   const done = new Map(subs.map((s) => [String(s.task), s]));
   const list = tasks.map((t) => ({
@@ -17,6 +46,7 @@ router.get('/tasks/today', requireAuth, wrap(async (req, res) => {
     audioText: t.audioText || t.prompt, audioUrl: t.audioUrl || '', options: t.options, xp: t.xp,
     assignedDate: t.assignedDate, isToday: t.assignedDate === today, translations: t.translations || {},
     fields: (t.fields || []).map((f) => ({ label: f.label, hint: f.hint, placeholder: f.placeholder })),
+    classroom: t.classroom ? { id: t.classroom._id, name: t.classroom.name, code: t.classroom.code } : null,
     done: done.has(String(t._id)),
     result: done.has(String(t._id))
       ? { correct: done.get(String(t._id)).correct, xpEarned: done.get(String(t._id)).xpEarned }
@@ -54,6 +84,12 @@ router.get('/tasks/today', requireAuth, wrap(async (req, res) => {
 router.post('/tasks/:id/submit', requireAuth, requireRole('student'), wrap(async (req, res) => {
   const task = await Task.findById(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
+  if (task.classroom) {
+    const isMember = await Classroom.exists({ _id: task.classroom, students: req.user._id, active: true });
+    if (!isMember) {
+      return res.status(403).json({ error: 'You are not enrolled in the classroom for this task.' });
+    }
+  }
   if (await Submission.exists({ user: req.user._id, task: task._id }))
     return res.status(409).json({ error: 'You already completed this task' });
 
@@ -98,6 +134,12 @@ router.post('/tasks/:id/submit', requireAuth, requireRole('student'), wrap(async
 router.post('/tasks/:id/practice', requireAuth, requireRole('student'), wrap(async (req, res) => {
   const task = await Task.findById(req.params.id);
   if (!task) return res.status(404).json({ error: 'Task not found' });
+  if (task.classroom) {
+    const isMember = await Classroom.exists({ _id: task.classroom, students: req.user._id, active: true });
+    if (!isMember) {
+      return res.status(403).json({ error: 'You are not enrolled in the classroom for this task.' });
+    }
+  }
 
   const answer = String(req.body.answer || '').trim();
   if (!answer) return res.status(400).json({ error: 'Please provide an answer' });
@@ -169,6 +211,11 @@ router.post('/tasks/sync-offline', requireAuth, requireRole('student'), wrap(asy
 
     const task = await Task.findById(taskId);
     if (!task) continue;
+
+    if (task.classroom) {
+      const isMember = await Classroom.exists({ _id: task.classroom, students: req.user._id, active: true });
+      if (!isMember) continue;
+    }
 
     // If submission already exists from a prior sync, treat as succeeded
     const existing = await Submission.findOne({ user: req.user._id, task: task._id });

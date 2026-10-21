@@ -253,11 +253,16 @@ export default function Quest() {
         >
           {/* Topic & Type Badge + Hint Trigger */}
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <TopicBadge topic={task.topic} size="sm" />
               <span className="text-xs font-black uppercase tracking-wider text-brand-700 dark:text-brand-300">
                 {task.topic} · {TYPE_LABEL[task.type]}
               </span>
+              {rawTask?.classroom && (
+                <span className="rounded-md bg-brand-100 text-brand-800 dark:bg-brand-950/80 dark:text-brand-300 text-[10px] font-black px-1.5 py-0.5 border border-brand-200 dark:border-brand-800">
+                  🏫 {rawTask.classroom.name}
+                </span>
+              )}
             </div>
 
             {!result && (

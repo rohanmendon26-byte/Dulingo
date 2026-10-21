@@ -91,5 +91,6 @@ export const publicUser = (u) => {
     isGracePeriod,
     freezeUsedRecently,
     badges: (u.badges || []).map((id) => ({ id, label: BADGE_LABELS[id] || id })),
+    classrooms: (u.classrooms || []).map(String),
   };
 };

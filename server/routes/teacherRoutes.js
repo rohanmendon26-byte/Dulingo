@@ -1,5 +1,5 @@
 import express from 'express';
-import { User, Task, Submission, Story } from '../models/index.js';
+import { User, Task, Submission, Story, Classroom } from '../models/index.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { audioUpload } from '../middleware/upload.js';
 import { hasCloudinary, cloudinary } from '../config/cloudinary.js';
@@ -43,15 +43,85 @@ router.post('/teacher/upload-audio', ...teacher, (req, res) => {
 });
 
 router.get('/teacher/overview', ...teacher, wrap(async (req, res) => {
-  const students = await User.find({ role: 'student' }).sort({ xp: -1 });
-  const counts = await Submission.aggregate([{ $group: { _id: '$user', done: { $sum: 1 } } }]);
+  const teacherClasses = await Classroom.find({ teacher: req.user._id, active: true })
+    .populate('students', 'name email xp streak')
+    .sort({ createdAt: -1 });
+
+  const selectedClassId = req.query.classroomId;
+  let targetClass = null;
+  if (selectedClassId) {
+    targetClass = teacherClasses.find((c) => String(c._id) === String(selectedClassId));
+  }
+
+  let studentList = [];
+  let studentIds = [];
+
+  if (targetClass) {
+    studentList = targetClass.students || [];
+    studentIds = studentList.map((s) => s._id);
+  } else if (teacherClasses.length > 0) {
+    const studentMap = new Map();
+    for (const c of teacherClasses) {
+      for (const s of (c.students || [])) {
+        studentMap.set(String(s._id), s);
+      }
+    }
+    studentList = Array.from(studentMap.values()).sort((a, b) => (b.xp || 0) - (a.xp || 0));
+    studentIds = studentList.map((s) => s._id);
+  } else {
+    studentList = await User.find({ role: 'student' }).sort({ xp: -1 });
+    studentIds = studentList.map((s) => s._id);
+  }
+
+  const counts = await Submission.aggregate([
+    { $match: { user: { $in: studentIds } } },
+    { $group: { _id: '$user', done: { $sum: 1 } } },
+  ]);
   const doneBy = new Map(counts.map((c) => [String(c._id), c.done]));
-  const tasks = await Task.find().sort({ assignedDate: -1, createdAt: -1 }).limit(50);
-  const reviews = await Submission.find({ needsReview: true }).sort({ createdAt: -1 }).limit(30)
-    .populate('user', 'name').populate('task', 'title');
+
+  const allTeacherClassIds = teacherClasses.map((c) => c._id);
+  const taskQuery = targetClass
+    ? { classroom: targetClass._id }
+    : { $or: [{ createdBy: req.user._id }, { classroom: { $in: allTeacherClassIds } }] };
+
+  const tasks = await Task.find(taskQuery)
+    .populate('classroom', 'name code')
+    .sort({ assignedDate: -1, createdAt: -1 })
+    .limit(60);
+
+  const reviews = await Submission.find({ needsReview: true, user: { $in: studentIds } })
+    .sort({ createdAt: -1 })
+    .limit(30)
+    .populate('user', 'name')
+    .populate('task', 'title');
+
   res.json({
-    students: students.map((s) => ({ id: s._id, name: s.name, xp: s.xp, streak: s.streak, done: doneBy.get(String(s._id)) || 0 })),
-    tasks: tasks.map((t) => ({ id: t._id, title: t.title, topic: t.topic, type: t.type, xp: t.xp, assignedDate: t.assignedDate, audioUrl: t.audioUrl || '' })),
+    classrooms: teacherClasses.map((c) => ({
+      id: c._id,
+      name: c.name,
+      subject: c.subject,
+      code: c.code,
+      studentCount: (c.students || []).length,
+    })),
+    selectedClassroomId: targetClass ? String(targetClass._id) : null,
+    students: studentList.map((s) => ({
+      id: s._id,
+      name: s.name,
+      email: s.email,
+      xp: s.xp || 0,
+      streak: s.streak || 0,
+      done: doneBy.get(String(s._id)) || 0,
+    })),
+    tasks: tasks.map((t) => ({
+      id: t._id,
+      title: t.title,
+      topic: t.topic,
+      type: t.type,
+      xp: t.xp,
+      assignedDate: t.assignedDate,
+      audioUrl: t.audioUrl || '',
+      classroom: t.classroom ? { id: t.classroom._id, name: t.classroom.name, code: t.classroom.code } : null,
+    })),
     essays: reviews.map((r) => ({
       id: r._id,
       student: r.user?.name,
@@ -107,12 +177,23 @@ router.post('/teacher/tasks', ...teacher, wrap(async (req, res) => {
     .map((f) => ({ label: String(f.label || '').trim(), answer: String(f.answer || '').trim(), hint: String(f.hint || '').trim(), placeholder: String(f.placeholder || '').trim() }))
     .filter((f) => f.label && f.answer);
   if (b.type === 'mock_form' && fields.length < 2) return res.status(400).json({ error: 'Add at least 2 form fields, each with a label and correct value' });
+
+  let classroomId = null;
+  if (b.classroom && b.classroom !== 'all' && b.classroom !== '') {
+    const cls = await Classroom.findOne({ _id: b.classroom, teacher: req.user._id, active: true });
+    if (!cls) {
+      return res.status(400).json({ error: 'Selected classroom not found or does not belong to you' });
+    }
+    classroomId = cls._id;
+  }
+
   const task = await Task.create({
     fields: b.type === 'mock_form' ? fields : [],
     title: b.title, topic: b.topic || 'General', type: b.type, prompt: b.prompt,
     audioText: b.audioText || '', audioUrl: b.audioUrl || '', options, answer: String(b.answer || '').trim(),
     explanation: b.explanation || '', xp: Math.min(Math.max(Number(b.xp) || 10, 1), 100),
     assignedDate: b.assignedDate || todayIST(), createdBy: req.user._id,
+    classroom: classroomId,
     translations: b.translations || {},
   });
   res.json({ id: task._id });

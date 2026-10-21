@@ -4,4 +4,5 @@ export { Submission } from './Submission.js';
 export { Story } from './Story.js';
 export { XpLog } from './XpLog.js';
 export { Announcement } from './Announcement.js';
+export { Classroom } from './Classroom.js';
 

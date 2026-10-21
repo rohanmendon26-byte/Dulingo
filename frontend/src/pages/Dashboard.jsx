@@ -18,6 +18,10 @@ import {
   Bell,
   BellRing,
   RotateCcw,
+  School,
+  LogOut,
+  Plus,
+  X,
 } from 'lucide-react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
@@ -38,14 +42,65 @@ export default function Dashboard() {
   const [notifSending, setNotifSending] = useState(false);
   const [notifSuccess, setNotifSuccess] = useState('');
 
-  useEffect(() => {
-    api('/tasks/today')
+  // Classroom enrollment state
+  const [classrooms, setClassrooms] = useState([]);
+  const [joinCode, setJoinCode] = useState('');
+  const [joinLoading, setJoinLoading] = useState(false);
+  const [joinMsg, setJoinMsg] = useState(null);
+
+  const loadTasks = () => {
+    return api('/tasks/today')
       .then((d) => {
         setData(d);
         if (d.user) setUser(d.user);
       })
       .catch((e) => setErr(e.message));
+  };
+
+  const loadClassrooms = () => {
+    return api('/classrooms/my')
+      .then((d) => setClassrooms(d.classrooms || []))
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    loadTasks();
+    loadClassrooms();
   }, [setUser]);
+
+  const handleJoinClassroom = async (e) => {
+    e?.preventDefault();
+    const clean = joinCode.trim().toUpperCase();
+    if (!clean) return;
+    setJoinLoading(true);
+    setJoinMsg(null);
+    try {
+      const res = await api('/classrooms/join', {
+        method: 'POST',
+        body: { code: clean },
+      });
+      setJoinMsg({ ok: true, text: res.message || `Joined ${res.classroom?.name}!` });
+      setJoinCode('');
+      loadClassrooms();
+      loadTasks();
+      setTimeout(() => setJoinMsg(null), 5000);
+    } catch (err) {
+      setJoinMsg({ ok: false, text: err.message });
+    } finally {
+      setJoinLoading(false);
+    }
+  };
+
+  const handleLeaveClassroom = async (id, name) => {
+    if (!confirm(`Leave ${name}? Tasks assigned only to this classroom will no longer be visible.`)) return;
+    try {
+      await api(`/classrooms/${id}/leave`, { method: 'POST' });
+      loadClassrooms();
+      loadTasks();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
 
   const [taskFilter, setTaskFilter] = useState('all'); // 'all' | 'todo' | 'practice'
   const tasks = data?.tasks || [];
@@ -192,6 +247,98 @@ export default function Dashboard() {
 
       {/* Classroom Announcements Feed */}
       <AnnouncementsFeed />
+
+      {/* Classroom Enrollment Section */}
+      <section className="card p-4 sm:p-5 space-y-3 dark:border-slate-700 dark:bg-black">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-brand-50 dark:border-slate-800 pb-2.5">
+          <div className="flex items-center gap-2">
+            <div className="grid h-8 w-8 place-items-center rounded-xl bg-brand-100 text-brand-700 dark:bg-brand-950/80 dark:text-brand-300">
+              <School size={16} />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-black text-slate-900 dark:text-slate-100">
+                My Classrooms ({classrooms.length})
+              </h2>
+              <p className="text-xs font-semibold text-slate-500">
+                {classrooms.length > 0
+                  ? 'You receive classroom questions and compete on the class leaderboard with these classes.'
+                  : 'Join your teacher’s classroom using their 6-character code to unlock class assignments.'}
+              </p>
+            </div>
+          </div>
+
+          <form onSubmit={handleJoinClassroom} className="flex items-center gap-1.5 w-full sm:w-auto">
+            <input
+              type="text"
+              maxLength={10}
+              placeholder="Code (e.g. DUL482)"
+              value={joinCode}
+              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+              className="input !py-1.5 !px-3 font-mono font-black text-xs sm:text-sm tracking-wider uppercase flex-1 sm:w-44 text-center sm:text-left"
+              disabled={joinLoading}
+            />
+            <button
+              type="submit"
+              disabled={joinLoading || !joinCode.trim()}
+              className="btn btn-primary !py-1.5 !px-3.5 text-xs sm:text-sm font-black whitespace-nowrap shadow-xs cursor-pointer inline-flex items-center gap-1"
+            >
+              <Plus size={14} />
+              <span>{joinLoading ? 'Joining…' : 'Join Class'}</span>
+            </button>
+          </form>
+        </div>
+
+        {joinMsg && (
+          <p
+            role="alert"
+            className={`flex items-center gap-2 rounded-xl p-2.5 text-xs font-extrabold ${
+              joinMsg.ok
+                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/70 dark:text-emerald-300 dark:border-emerald-800'
+                : 'bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/70 dark:text-rose-300 dark:border-rose-800'
+            }`}
+          >
+            {joinMsg.ok ? <CheckCircle2 size={15} /> : <X size={15} />}
+            <span>{joinMsg.text}</span>
+          </p>
+        )}
+
+        {classrooms.length === 0 ? (
+          <div className="rounded-xl bg-slate-50 dark:bg-slate-900/60 p-3 text-center text-xs font-semibold text-slate-500 dark:text-slate-400">
+            Have a classroom join code from your teacher? Enter it above to join your class!
+          </div>
+        ) : (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {classrooms.map((c) => (
+              <div
+                key={c.id}
+                className="rounded-xl border border-brand-100 bg-brand-50/50 dark:border-slate-800 dark:bg-slate-900 p-3 flex items-center justify-between gap-2"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-black text-xs sm:text-sm text-slate-900 dark:text-slate-100 truncate">
+                      {c.name}
+                    </span>
+                    <span className="rounded bg-brand-200/80 px-1.5 py-0.2 text-[10px] font-mono font-black text-brand-900 dark:bg-brand-950 dark:text-brand-300">
+                      {c.code}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+                    Teacher: {c.teacherName} · {c.subject}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleLeaveClassroom(c.id, c.name)}
+                  className="text-slate-400 hover:text-rose-600 transition p-1 cursor-pointer"
+                  title="Leave this classroom"
+                >
+                  <LogOut size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {/* Engagement Nudge / Streak at Risk Card */}
       <motion.section
@@ -478,7 +625,18 @@ export default function Dashboard() {
                 <TopicBadge topic={t.topic} size="md" />
 
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-black text-sm sm:text-base text-slate-900 dark:text-slate-100">{t.title}</p>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <p className="truncate font-black text-sm sm:text-base text-slate-900 dark:text-slate-100">{t.title}</p>
+                    {t.classroom ? (
+                      <span className="rounded-md bg-brand-100 text-brand-800 dark:bg-brand-950/80 dark:text-brand-300 text-[10px] font-black px-1.5 py-0.5 border border-brand-200 dark:border-brand-800">
+                        🏫 {t.classroom.name}
+                      </span>
+                    ) : (
+                      <span className="rounded-md bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 text-[10px] font-bold px-1.5 py-0.5">
+                        🌐 Public
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
                     {t.topic} · {TYPE_LABEL[t.type]}
                   </p>

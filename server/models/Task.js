@@ -19,6 +19,7 @@ const taskSchema = new Schema(
     assignedDate: { type: String, required: true }, // YYYY-MM-DD
     translations: { type: Schema.Types.Mixed, default: {} }, // { hi: {title,prompt,audioText,options,explanation}, kn: {...} }
     createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
+    classroom: { type: Schema.Types.ObjectId, ref: 'Classroom', default: null },
   },
   { timestamps: true }
 );
