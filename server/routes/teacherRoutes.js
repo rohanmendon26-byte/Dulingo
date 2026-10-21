@@ -239,4 +239,11 @@ router.post('/teacher/stories', ...teacher, wrap(async (req, res) => {
   res.json({ id: story._id });
 }));
 
+router.delete('/teacher/stories/:id', ...teacher, wrap(async (req, res) => {
+  const story = await Story.findByIdAndDelete(req.params.id);
+  if (!story) return res.status(404).json({ error: 'Audio story not found' });
+  await User.updateMany({ storiesRead: req.params.id }, { $pull: { storiesRead: req.params.id } });
+  res.json({ ok: true, message: 'Audio story deleted' });
+}));
+
 export default router;

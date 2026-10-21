@@ -1,5 +1,5 @@
 import express from 'express';
-import { Story } from '../models/index.js';
+import { Story, User } from '../models/index.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { award, publicUser, BADGE_LABELS } from '../services/gameService.js';
 import { wrap } from '../utils/asyncWrap.js';
@@ -8,7 +8,7 @@ const router = express.Router();
 
 router.get('/stories', requireAuth, wrap(async (req, res) => {
   const stories = await Story.find().sort({ createdAt: -1 });
-  const read = new Set(req.user.storiesRead.map(String));
+  const read = new Set((req.user.storiesRead || []).map(String));
   res.json({
     stories: stories.map((s) => ({
       id: s._id,
@@ -19,6 +19,7 @@ router.get('/stories', requireAuth, wrap(async (req, res) => {
       xp: s.xp,
       translations: s.translations || {},
       read: read.has(String(s._id)),
+      createdAt: s.createdAt,
     })),
   });
 }));
@@ -35,6 +36,13 @@ router.post('/stories/:id/complete', requireAuth, requireRole('student'), wrap(a
     newBadges: newBadges.map((id) => ({ id, label: BADGE_LABELS[id] })),
     user: publicUser(req.user),
   });
+}));
+
+router.delete('/stories/:id', requireAuth, requireRole('teacher'), wrap(async (req, res) => {
+  const story = await Story.findByIdAndDelete(req.params.id);
+  if (!story) return res.status(404).json({ error: 'Audio story not found' });
+  await User.updateMany({ storiesRead: req.params.id }, { $pull: { storiesRead: req.params.id } });
+  res.json({ ok: true, message: 'Audio story deleted successfully' });
 }));
 
 export default router;

@@ -9,13 +9,14 @@ import {
   Turtle,
   Sparkles,
   Award,
+  Trash2,
 } from 'lucide-react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
 import { Confetti, Loading, SpeakerButton, TopicBadge, TopicIcon, localize } from '../components.jsx';
 import { useSpeech } from '../speech.js';
 
-function Reader({ story: raw, onBack, onDone }) {
+function Reader({ story: raw, onBack, onDone, onDelete }) {
   const { user, setUser, lang } = useAuth();
   const speech = useSpeech(lang);
   const story = localize(raw, lang);
@@ -60,12 +61,27 @@ function Reader({ story: raw, onBack, onDone }) {
   return (
     <div className="mx-auto max-w-2xl space-y-4">
       <Confetti show={!!reward?.xpEarned} />
-      <button
-        className="btn btn-ghost !py-1.5 !px-3 text-sm inline-flex items-center gap-1.5"
-        onClick={() => { speech.stop(); onBack(); }}
-      >
-        <ArrowLeft size={16} /> All stories
-      </button>
+      <div className="flex items-center justify-between gap-2">
+        <button
+          className="btn btn-ghost !py-1.5 !px-3 text-sm inline-flex items-center gap-1.5"
+          onClick={() => { speech.stop(); onBack(); }}
+        >
+          <ArrowLeft size={16} /> All stories
+        </button>
+
+        {user?.role === 'teacher' && (
+          <button
+            type="button"
+            className="btn btn-ghost !py-1.5 !px-3 text-xs sm:text-sm text-rose-600 border border-rose-200 hover:bg-rose-50 inline-flex items-center gap-1.5"
+            onClick={(e) => {
+              speech.stop();
+              onDelete?.(e, raw.id, raw.title);
+            }}
+          >
+            <Trash2 size={15} /> Delete story
+          </button>
+        )}
+      </div>
 
       <div className="flex items-center gap-2">
         <TopicBadge topic={story.topic} size="sm" />
@@ -124,7 +140,7 @@ function Reader({ story: raw, onBack, onDone }) {
 
       {raw.read && !reward && (
         <p className="flex items-center justify-center gap-1.5 text-center text-xs font-bold text-slate-500">
-          <CheckCircle2 size={16} className="text-emerald-600" /> You have already earned XP for this story.
+          <CheckCircle2 size={16} /> You have already earned XP for this story.
         </p>
       )}
     </div>
@@ -132,11 +148,34 @@ function Reader({ story: raw, onBack, onDone }) {
 }
 
 export default function Stories() {
-  const { lang } = useAuth();
+  const { user, lang } = useAuth();
   const [stories, setStories] = useState(null);
   const [open, setOpen] = useState(null);
 
-  useEffect(() => { api('/stories').then((d) => setStories(d.stories)); }, []);
+  const loadStories = () => {
+    api('/stories').then((d) => setStories(d.stories || []));
+  };
+
+  useEffect(() => {
+    loadStories();
+  }, []);
+
+  const deleteStory = async (e, storyId, title) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete the audio story "${title || 'Untitled'}"? Learners will no longer be able to listen to it.`)) {
+      return;
+    }
+    try {
+      await api(`/stories/${storyId}`, { method: 'DELETE' });
+      setStories((prev) => (prev ? prev.filter((x) => x.id !== storyId) : []));
+      if (open?.id === storyId) {
+        setOpen(null);
+      }
+    } catch (err) {
+      alert(err.message || 'Failed to delete audio story');
+    }
+  };
+
   if (!stories) return <Loading />;
 
   if (open) {
@@ -145,6 +184,7 @@ export default function Stories() {
         story={open}
         onBack={() => setOpen(null)}
         onDone={(id) => setStories((s) => s.map((x) => (x.id === id ? { ...x, read: true } : x)))}
+        onDelete={deleteStory}
       />
     );
   }
@@ -171,32 +211,55 @@ export default function Stories() {
         {stories.map((raw) => {
           const s = localize(raw, lang);
           return (
-            <button
+            <div
               key={s.id}
               onClick={() => setOpen(raw)}
-              className="card flex items-center gap-3.5 p-3.5 text-left transition hover:-translate-y-0.5 hover:shadow-md cursor-pointer"
+              className="card flex items-center justify-between gap-3.5 p-3.5 text-left transition hover:-translate-y-0.5 hover:shadow-md cursor-pointer select-none"
             >
-              <TopicBadge topic={s.topic} size="lg" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-base font-black text-slate-900">{s.title}</p>
-                <p className="text-xs font-bold text-slate-500">{s.topic}</p>
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <TopicBadge topic={s.topic} size="lg" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <p className="truncate text-base font-black text-slate-900">{s.title}</p>
+                    {s.audioUrl && (
+                      <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-300 shrink-0">
+                        <Headphones size={11} /> Audio
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs font-bold text-slate-500">{s.topic}</p>
+                </div>
               </div>
-              <span
-                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-black ${
-                  s.read ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
-                }`}
-              >
-                {s.read ? (
-                  <>
-                    <CheckCircle2 size={13} /> Done
-                  </>
-                ) : (
-                  <>
-                    <Zap size={13} /> +{s.xp} XP
-                  </>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-black ${
+                    s.read ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                  }`}
+                >
+                  {s.read ? (
+                    <>
+                      <CheckCircle2 size={13} /> Done
+                    </>
+                  ) : (
+                    <>
+                      <Zap size={13} /> +{s.xp} XP
+                    </>
+                  )}
+                </span>
+
+                {user?.role === 'teacher' && (
+                  <button
+                    type="button"
+                    title="Delete audio story"
+                    onClick={(e) => deleteStory(e, s.id, s.title)}
+                    className="rounded-xl p-2 text-rose-500 hover:bg-rose-100 hover:text-rose-700 dark:hover:bg-rose-950/60 transition cursor-pointer"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 )}
-              </span>
-            </button>
+              </div>
+            </div>
           );
         })}
       </div>

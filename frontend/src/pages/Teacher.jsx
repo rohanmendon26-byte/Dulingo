@@ -696,6 +696,25 @@ function StoryForm() {
   const [translations, setTranslations] = useState({ hi: { title: '', text: '' }, kn: { title: '', text: '' } });
   const [showTr, setShowTr] = useState(false);
   const [msg, setMsg] = useState(null);
+  const [stories, setStories] = useState([]);
+  const [loadingStories, setLoadingStories] = useState(true);
+  const [actionMsg, setActionMsg] = useState(null);
+
+  const loadStories = async () => {
+    setLoadingStories(true);
+    try {
+      const res = await api('/stories');
+      setStories(res.stories || []);
+    } catch (err) {
+      console.error('Failed to load stories:', err);
+    } finally {
+      setLoadingStories(false);
+    }
+  };
+
+  useEffect(() => {
+    loadStories();
+  }, []);
 
   const updateTr = (code, field, val) => {
     setTranslations((prev) => ({
@@ -729,87 +748,189 @@ function StoryForm() {
       setF({ ...f, title: '', text: '', audioUrl: '' });
       setTranslations({ hi: { title: '', text: '' }, kn: { title: '', text: '' } });
       setShowTr(false);
+      loadStories();
     } catch (x) { setMsg({ ok: false, text: x.message }); }
   };
 
+  const deleteStory = async (id, title) => {
+    if (!window.confirm(`Are you sure you want to delete the audio story "${title || 'Untitled'}"? Learners will no longer be able to listen to it.`)) {
+      return;
+    }
+    try {
+      await api(`/teacher/stories/${id}`, { method: 'DELETE' });
+      setActionMsg({ ok: true, text: `Audio story "${title}" deleted successfully.` });
+      setStories((prev) => prev.filter((s) => s.id !== id));
+      setTimeout(() => setActionMsg(null), 3500);
+    } catch (err) {
+      setActionMsg({ ok: false, text: err.message || 'Failed to delete audio story.' });
+    }
+  };
+
   return (
-    <form onSubmit={save} className="card space-y-4 p-4 sm:p-5">
-      <h2 className="text-xl sm:text-2xl font-black text-slate-900">Add an audio story</h2>
-      <label className="block font-extrabold text-xs sm:text-sm">Title<input className="input mt-1" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} required /></label>
-      <label className="block font-extrabold text-xs sm:text-sm">Topic
-        <select className="input mt-1" value={f.topic} onChange={(e) => setF({ ...f, topic: e.target.value })}>{TOPICS.map((t) => <option key={t}>{t}</option>)}</select>
-      </label>
-      <label className="block font-extrabold text-xs sm:text-sm">Story (leave a blank line between paragraphs)
-        <textarea className="input mt-1 min-h-48" value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} required />
-      </label>
-      <AudioPicker audioUrl={f.audioUrl} onChange={(url) => setF({ ...f, audioUrl: url })} />
+    <div className="space-y-6">
+      <form onSubmit={save} className="card space-y-4 p-4 sm:p-5">
+        <h2 className="text-xl sm:text-2xl font-black text-slate-900">Add an audio story</h2>
+        <label className="block font-extrabold text-xs sm:text-sm">Title<input className="input mt-1" value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} required /></label>
+        <label className="block font-extrabold text-xs sm:text-sm">Topic
+          <select className="input mt-1" value={f.topic} onChange={(e) => setF({ ...f, topic: e.target.value })}>{TOPICS.map((t) => <option key={t}>{t}</option>)}</select>
+        </label>
+        <label className="block font-extrabold text-xs sm:text-sm">Story (leave a blank line between paragraphs)
+          <textarea className="input mt-1 min-h-48" value={f.text} onChange={(e) => setF({ ...f, text: e.target.value })} required />
+        </label>
+        <AudioPicker audioUrl={f.audioUrl} onChange={(url) => setF({ ...f, audioUrl: url })} />
 
-      {/* Expandable Story Translations Section */}
-      <div className="rounded-2xl border-2 border-brand-200 bg-brand-50/50 dark:border-brand-800/60 dark:bg-brand-950/40 p-3.5 sm:p-4 space-y-3">
-        <button
-          type="button"
-          onClick={() => setShowTr(!showTr)}
-          className="flex w-full items-center justify-between font-black text-brand-800 text-left cursor-pointer"
-        >
-          <span className="flex items-center gap-2">
-            <Globe size={18} className="text-brand-600" />
-            <span className="text-xs sm:text-sm">Translations (Hindi & Kannada)</span>
-            <span className="rounded-full bg-brand-200 px-2.5 py-0.5 text-[11px] text-brand-900 font-extrabold">
-              Optional
+        {/* Expandable Story Translations Section */}
+        <div className="rounded-2xl border-2 border-brand-200 bg-brand-50/50 dark:border-brand-800/60 dark:bg-brand-950/40 p-3.5 sm:p-4 space-y-3">
+          <button
+            type="button"
+            onClick={() => setShowTr(!showTr)}
+            className="flex w-full items-center justify-between font-black text-brand-800 text-left cursor-pointer"
+          >
+            <span className="flex items-center gap-2">
+              <Globe size={18} className="text-brand-600" />
+              <span className="text-xs sm:text-sm">Translations (Hindi & Kannada)</span>
+              <span className="rounded-full bg-brand-200 px-2.5 py-0.5 text-[11px] text-brand-900 font-extrabold">
+                Optional
+              </span>
             </span>
-          </span>
-          {showTr ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-        </button>
-        <p className="text-xs font-bold text-slate-500">
-          Provide Hindi and Kannada translations for the story title and paragraphs so learners can read and listen in their preferred regional language.
-        </p>
+            {showTr ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </button>
+          <p className="text-xs font-bold text-slate-500">
+            Provide Hindi and Kannada translations for the story title and paragraphs so learners can read and listen in their preferred regional language.
+          </p>
 
-        {showTr && (
-          <div className="space-y-4 pt-2">
-            {[['Hindi', 'hi'], ['Kannada', 'kn']].map(([langName, code]) => (
-              <div key={code} className="space-y-3 rounded-2xl border border-brand-100 bg-white p-3.5 sm:p-4">
-                <h4 className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-brand-700">
-                  <Globe size={15} /> {langName} ({code}) Translation
-                </h4>
-                <label className="block text-xs font-extrabold text-slate-600">
-                  Translated Title ({code})
-                  <input
-                    className="input mt-1 !text-xs sm:!text-sm"
-                    placeholder={`Title in ${langName}`}
-                    value={translations[code]?.title || ''}
-                    onChange={(e) => updateTr(code, 'title', e.target.value)}
-                  />
-                </label>
-                <label className="block text-xs font-extrabold text-slate-600">
-                  Translated Story ({code})
-                  <textarea
-                    className="input mt-1 min-h-32 !text-xs sm:!text-sm"
-                    placeholder={`Story text in ${langName} (leave blank line between paragraphs)`}
-                    value={translations[code]?.text || ''}
-                    onChange={(e) => updateTr(code, 'text', e.target.value)}
-                  />
-                </label>
+          {showTr && (
+            <div className="space-y-4 pt-2">
+              {[['Hindi', 'hi'], ['Kannada', 'kn']].map(([langName, code]) => (
+                <div key={code} className="space-y-3 rounded-2xl border border-brand-100 bg-white p-3.5 sm:p-4">
+                  <h4 className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-brand-700">
+                    <Globe size={15} /> {langName} ({code}) Translation
+                  </h4>
+                  <label className="block text-xs font-extrabold text-slate-600">
+                    Translated Title ({code})
+                    <input
+                      className="input mt-1 !text-xs sm:!text-sm"
+                      placeholder={`Title in ${langName}`}
+                      value={translations[code]?.title || ''}
+                      onChange={(e) => updateTr(code, 'title', e.target.value)}
+                    />
+                  </label>
+                  <label className="block text-xs font-extrabold text-slate-600">
+                    Translated Story ({code})
+                    <textarea
+                      className="input mt-1 min-h-32 !text-xs sm:!text-sm"
+                      placeholder={`Story text in ${langName} (leave blank line between paragraphs)`}
+                      value={translations[code]?.text || ''}
+                      onChange={(e) => updateTr(code, 'text', e.target.value)}
+                    />
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {msg && (
+          <p
+            role="alert"
+            className={`flex items-center gap-2 rounded-xl p-3 text-xs sm:text-sm font-bold ${
+              msg.ok ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-600 border border-rose-200'
+            }`}
+          >
+            {msg.ok ? <CheckCircle2 size={16} /> : <X size={16} />}
+            <span>{msg.text}</span>
+          </p>
+        )}
+        <button className="btn btn-primary w-full inline-flex items-center justify-center gap-2">
+          <BookOpen size={18} /> Publish story
+        </button>
+      </form>
+
+      {/* Published Audio Stories List with Delete Option */}
+      <div className="card space-y-4 p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-brand-50 dark:border-slate-800 pb-3">
+          <div>
+            <h3 className="text-lg sm:text-xl font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+              <BookOpen size={20} className="text-brand-600 dark:text-brand-400" />
+              <span>Published Audio Stories</span>
+            </h3>
+            <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+              Manage existing audio stories. You can preview, listen, or delete stories.
+            </p>
+          </div>
+          <span className="rounded-full bg-brand-100 dark:bg-brand-950 px-3 py-1 text-xs font-black text-brand-800 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
+            {stories.length} {stories.length === 1 ? 'story' : 'stories'}
+          </span>
+        </div>
+
+        {actionMsg && (
+          <p
+            role="alert"
+            className={`flex items-center gap-2 rounded-xl p-3 text-xs sm:text-sm font-bold ${
+              actionMsg.ok ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-600 border border-rose-200'
+            }`}
+          >
+            {actionMsg.ok ? <CheckCircle2 size={16} /> : <X size={16} />}
+            <span>{actionMsg.text}</span>
+          </p>
+        )}
+
+        {loadingStories ? (
+          <p className="p-4 text-center text-xs font-bold text-slate-400">Loading stories…</p>
+        ) : stories.length === 0 ? (
+          <p className="p-4 text-center text-xs sm:text-sm font-bold text-slate-500">
+            No audio stories published yet. Create one above to get started!
+          </p>
+        ) : (
+          <div className="divide-y divide-brand-50 dark:divide-slate-800">
+            {stories.map((s) => (
+              <div key={s.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3.5 first:pt-0 last:pb-0">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-black text-sm sm:text-base text-slate-900 dark:text-slate-100">{s.title}</span>
+                    <span className="rounded-full bg-purple-100 dark:bg-purple-950/80 px-2.5 py-0.5 text-[11px] font-extrabold text-purple-700 dark:text-purple-300">
+                      {s.topic}
+                    </span>
+                    {s.audioUrl ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/80 px-2 py-0.5 text-[10px] font-black text-emerald-700 dark:text-emerald-300 ring-1 ring-emerald-300 dark:ring-emerald-800">
+                        <Mic size={11} /> Studio Audio
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:text-slate-400">
+                        TTS Narration
+                      </span>
+                    )}
+                  </div>
+                  <p className="line-clamp-2 text-xs font-medium text-slate-600 dark:text-slate-300">
+                    {s.text}
+                  </p>
+                  {s.audioUrl && (
+                    <div className="pt-1">
+                      <audio controls src={resolveMediaUrl(s.audioUrl)} className="h-8 max-w-sm w-full" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+                  <span className="text-xs font-extrabold text-amber-700 bg-amber-50 dark:bg-amber-950/60 dark:text-amber-300 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800">
+                    +{s.xp} XP
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => deleteStory(s.id, s.title)}
+                    className="btn btn-ghost !py-1.5 !px-3 !text-xs text-rose-600 border border-rose-200 hover:bg-rose-50 hover:border-rose-300 dark:border-rose-900/60 dark:hover:bg-rose-950/60 inline-flex items-center gap-1.5 cursor-pointer"
+                    title="Delete audio story"
+                  >
+                    <Trash2 size={14} />
+                    <span>Delete</span>
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
-
-      {msg && (
-        <p
-          role="alert"
-          className={`flex items-center gap-2 rounded-xl p-3 text-xs sm:text-sm font-bold ${
-            msg.ok ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-600 border border-rose-200'
-          }`}
-        >
-          {msg.ok ? <CheckCircle2 size={16} /> : <X size={16} />}
-          <span>{msg.text}</span>
-        </p>
-      )}
-      <button className="btn btn-primary w-full inline-flex items-center justify-center gap-2">
-        <BookOpen size={18} /> Publish story
-      </button>
-    </form>
+    </div>
   );
 }
 
@@ -1437,7 +1558,7 @@ export default function Teacher() {
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'classrooms', label: 'Classrooms', icon: School },
     { id: 'task', label: 'New task', icon: PlusCircle },
-    { id: 'story', label: 'New story', icon: BookOpen },
+    { id: 'story', label: 'Audio stories', icon: BookOpen },
     { id: 'announcements', label: 'Announcements', icon: Megaphone },
   ];
 
