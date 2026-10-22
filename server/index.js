@@ -4,6 +4,7 @@ import express from 'express';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import { connectDB } from './config/db.js';
+import { ensureDemoData } from './services/seedService.js';
 import apiRouter from './routes/index.js';
 
 const app = express();
@@ -26,7 +27,8 @@ app.use('/api', apiRouter);
 
 // Start server
 const port = process.env.PORT || 4000;
-connectDB().then(() => {
+connectDB().then(async () => {
+  await ensureDemoData().catch((err) => console.warn('Demo seeding deferred:', err));
   app.listen(port, () => console.log(`Dulingo API running on :${port}`));
 });
 

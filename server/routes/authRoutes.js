@@ -14,6 +14,7 @@ import { authLimiter } from '../middleware/rateLimiter.js';
 import { validate } from '../middleware/validate.js';
 import { registerSchema, loginSchema } from '../validators/schemas.js';
 import { publicUser } from '../services/gameService.js';
+import { ensureDemoAccount } from '../services/seedService.js';
 import { wrap } from '../utils/asyncWrap.js';
 
 const router = express.Router();
@@ -61,12 +62,50 @@ router.post(
   validate(loginSchema),
   wrap(async (req, res) => {
     const { email, password } = req.body;
-    const user = await User.findOne({ email: email.toLowerCase() });
+    const normalizedEmail = String(email || '').toLowerCase().trim();
+    let user = await User.findOne({ email: normalizedEmail });
+
+    const isDemoAccount = [
+      'teacher@dulingo.in',
+      'ramesh@dulingo.in',
+      'sunita@dulingo.in',
+      'anil@dulingo.in',
+      'meena@dulingo.in',
+      'kiran@dulingo.in',
+      'learner@dulingo.in',
+      'student@dulingo.in',
+    ].includes(normalizedEmail);
+
+    // If demo account doesn't exist or password mismatch with demo1234, auto-provision or auto-heal it
+    if (isDemoAccount) {
+      if (!user || !(await bcrypt.compare(password, user.passwordHash).catch(() => false))) {
+        if (password === 'demo1234' || !user) {
+          user = await ensureDemoAccount(
+            normalizedEmail,
+            normalizedEmail.includes('teacher') ? 'teacher' : 'student'
+          );
+        }
+      }
+    }
 
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
       return res.status(401).json({ error: 'Wrong email or password' });
     }
 
+    return sendAuthResponse(res, user, 200);
+  })
+);
+
+router.post(
+  '/auth/demo-login',
+  wrap(async (req, res) => {
+    const rawRole = req.body?.role || '';
+    const rawEmail = String(req.body?.email || '').trim().toLowerCase();
+    const isTeacher = rawRole === 'teacher' || rawEmail.includes('teacher');
+    const email = isTeacher ? 'teacher@dulingo.in' : 'ramesh@dulingo.in';
+    const role = isTeacher ? 'teacher' : 'student';
+
+    const user = await ensureDemoAccount(email, role);
     return sendAuthResponse(res, user, 200);
   })
 );
