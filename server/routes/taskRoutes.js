@@ -65,6 +65,17 @@ router.get('/tasks/today', requireAuth, wrap(async (req, res) => {
       }
     }
 
+    const fields = (t.fields || []).map((f) => {
+      const primaryAnswer = String(f.answer || '').split('|')[0].trim();
+      return {
+        label: f.label,
+        hint: f.hint,
+        placeholder: f.placeholder || (primaryAnswer ? `e.g. ${primaryAnswer}` : `Enter ${f.label}`),
+        givenValue: primaryAnswer,
+        answer: primaryAnswer,
+      };
+    });
+
     return {
       id: t._id, title: t.title, topic: t.topic, type: t.type, prompt: t.prompt,
       audioText: t.audioText || t.prompt, audioUrl: t.audioUrl || '', options: t.options, xp: t.xp,
@@ -76,7 +87,7 @@ router.get('/tasks/today', requireAuth, wrap(async (req, res) => {
       daysLeft,
       hoursLeft,
       isToday: t.assignedDate === today, translations: t.translations || {},
-      fields: (t.fields || []).map((f) => ({ label: f.label, hint: f.hint, placeholder: f.placeholder })),
+      fields,
       classroom: t.classroom ? { id: t.classroom._id, name: t.classroom.name, code: t.classroom.code } : null,
       done: done.has(String(t._id)),
       result: done.has(String(t._id))
@@ -84,9 +95,16 @@ router.get('/tasks/today', requireAuth, wrap(async (req, res) => {
         : null,
     };
   });
+
+  // For students: after the deadline, the question is deleted automatically from the student section
+  let studentFilteredList = list;
+  if (req.user.role === 'student') {
+    studentFilteredList = list.filter((t) => !t.isExpired);
+  }
+
   // pending first, today's before older ones
-  list.sort((a, b) => Number(a.done) - Number(b.done) || Number(b.isToday) - Number(a.isToday));
-  const todays = list.filter((t) => t.isToday);
+  studentFilteredList.sort((a, b) => Number(a.done) - Number(b.done) || Number(b.isToday) - Number(a.isToday));
+  const todays = studentFilteredList.filter((t) => t.isToday);
 
   // recent teacher feedbacks for essays
   const reviewedSubs = await Submission.find({ user: req.user._id, feedbackText: { $exists: true, $ne: '' } })
@@ -102,12 +120,12 @@ router.get('/tasks/today', requireAuth, wrap(async (req, res) => {
   }));
 
   res.json({
-    tasks: list,
+    tasks: studentFilteredList,
     feedbacks,
     summary: {
       doneToday: todays.filter((t) => t.done).length,
       totalToday: todays.length,
-      pending: list.filter((t) => !t.done).length,
+      pending: studentFilteredList.filter((t) => !t.done).length,
     },
     user: publicUser(req.user),
   });
@@ -123,11 +141,11 @@ router.post('/tasks/:id/submit', requireAuth, requireRole('student'), validate(s
     }
   }
 
-  // Check if deadline timeline has passed
+  // Check if deadline has passed (deleted automatically from student section)
   const now = new Date();
   let expDate = task.expiresAt ? new Date(task.expiresAt) : (task.dueDate ? new Date(`${task.dueDate}T${task.dueTime || '23:59'}:00`) : null);
   if (expDate && !isNaN(expDate.getTime()) && now > expDate) {
-    return res.status(403).json({ error: 'The deadline for this task has passed. You can still practice it in Practice Mode without XP.' });
+    return res.status(404).json({ error: 'This question deadline has passed and is no longer available in the student section.' });
   }
 
   if (await Submission.exists({ user: req.user._id, task: task._id }))
@@ -179,6 +197,13 @@ router.post('/tasks/:id/practice', requireAuth, requireRole('student'), wrap(asy
     if (!isMember) {
       return res.status(403).json({ error: 'You are not enrolled in the classroom for this task.' });
     }
+  }
+
+  // Check if deadline has passed (deleted automatically from student section)
+  const now = new Date();
+  let expDate = task.expiresAt ? new Date(task.expiresAt) : (task.dueDate ? new Date(`${task.dueDate}T${task.dueTime || '23:59'}:00`) : null);
+  if (expDate && !isNaN(expDate.getTime()) && now > expDate) {
+    return res.status(404).json({ error: 'This question deadline has passed and is no longer available in the student section.' });
   }
 
   const answer = String(req.body.answer || '').trim();

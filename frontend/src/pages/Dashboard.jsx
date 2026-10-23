@@ -105,7 +105,9 @@ export default function Dashboard() {
 
   const [taskFilter, setTaskFilter] = useState('all'); // 'all' | 'todo' | 'practice'
   const [selectedClassFilter, setSelectedClassFilter] = useState('all'); // 'all' | classroomId
-  const tasks = data?.tasks || [];
+  const rawTasks = data?.tasks || [];
+  // After deadline, tasks are automatically deleted / excluded from the student section
+  const tasks = rawTasks.filter((t) => !t.isExpired);
   const summary = data?.summary || { done: 0, pending: 0, total: 0, doneToday: 0, totalToday: 0 };
   const u = data?.user || { name: 'Learner', streak: 0, xp: 0, level: 1, xpIntoLevel: 0, badges: [] };
   const allDone = summary.pending === 0;

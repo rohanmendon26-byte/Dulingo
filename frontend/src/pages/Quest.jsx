@@ -18,6 +18,8 @@ import {
   WifiOff,
   RotateCcw,
   Clock,
+  Copy,
+  FileText,
 } from 'lucide-react';
 import { api } from '../api.js';
 import { useAuth } from '../auth.jsx';
@@ -50,10 +52,16 @@ export default function Quest() {
   useEffect(() => {
     api('/tasks/today')
       .then((d) => {
-        const all = d.tasks || [];
+        // After the deadline, questions are deleted automatically from the student section
+        const all = (d.tasks || []).filter((t) => !t.isExpired);
         if (practiceId) {
           const match = all.find((t) => String(t.id) === String(practiceId));
-          setTasks(match ? [match] : all);
+          if (!match && d.tasks?.some((t) => String(t.id) === String(practiceId) && t.isExpired)) {
+            setErr('This question deadline has passed and is no longer available in the student section.');
+            setTasks([]);
+          } else {
+            setTasks(match ? [match] : all);
+          }
         } else if (modeParam === 'practice') {
           const completed = all.filter((t) => t.done);
           setTasks(completed.length > 0 ? completed : all);
@@ -440,49 +448,122 @@ export default function Quest() {
 
           {/* Mock Government Form Task */}
           {task.type === 'mock_form' && (
-            <div className="space-y-3">
-              <p className="text-xs font-black uppercase tracking-wider text-slate-500">
-                Official Form Boxes: Fill in the details
-              </p>
+            <div className="space-y-3.5">
+              {/* Given Form Details / Scenario Reference Card */}
+              <div className="rounded-2xl border-2 border-brand-200 bg-brand-50/70 dark:border-brand-800/80 dark:bg-brand-950/40 p-3.5 sm:p-4 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-1.5">
+                  <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-brand-900 dark:text-brand-200">
+                    <FileText size={16} className="text-brand-600 dark:text-brand-400" />
+                    <span>Given Details for this Form</span>
+                  </div>
+                  <span className="rounded-full bg-brand-200/90 dark:bg-brand-900/80 px-2 py-0.5 text-[10px] font-black text-brand-900 dark:text-brand-300">
+                    Only these values are accepted
+                  </span>
+                </div>
+                <p className="text-[11px] sm:text-xs font-semibold text-slate-600 dark:text-slate-400">
+                  You are provided with the official given values below. Enter each given value into its corresponding box, or tap <strong>“Fill”</strong>:
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  {rawTask.fields.map((f, k) => {
+                    const given = f.givenValue || f.answer || '';
+                    return (
+                      <div
+                        key={k}
+                        className="flex items-center justify-between gap-2 rounded-xl bg-white dark:bg-slate-900 p-2 border border-brand-100 dark:border-brand-900/50 shadow-2xs"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <span className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 truncate">
+                            {f.label}
+                          </span>
+                          <span className="block text-xs font-black text-brand-800 dark:text-brand-300 font-mono truncate">
+                            {given}
+                          </span>
+                        </div>
+                        {!result && (
+                          <button
+                            type="button"
+                            onClick={() => setField(k, given)}
+                            className="btn btn-ghost !py-1 !px-2 text-[11px] text-brand-700 dark:text-brand-400 border border-brand-200 dark:border-brand-800 hover:bg-brand-100 dark:hover:bg-brand-900/60 inline-flex items-center gap-1 cursor-pointer shrink-0"
+                            title={`Fill ${f.label}`}
+                          >
+                            <Copy size={11} />
+                            <span>Fill</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Form Input Boxes */}
               <div className="space-y-2.5">
                 {rawTask.fields.map((f, k) => {
                   const r = result?.fieldResults?.[k];
+                  const given = f.givenValue || f.answer || '';
+                  const currentVal = formVals[k] || '';
+                  const isMatch = given && currentVal.trim().toLowerCase() === given.trim().toLowerCase();
                   const isThisFieldListening = mic.listening && activeMicField === k;
                   return (
                     <div
                       key={k}
                       className={`card p-3 sm:p-3.5 transition ${
-                        r ? (r.ok ? '!border-emerald-300 bg-emerald-50/50' : '!border-rose-300 bg-rose-50/50') : ''
+                        r
+                          ? r.ok
+                            ? '!border-emerald-300 bg-emerald-50/50 dark:bg-emerald-950/30'
+                            : '!border-rose-300 bg-rose-50/50 dark:bg-rose-950/30'
+                          : isMatch
+                          ? 'border-emerald-200 bg-emerald-50/20 dark:border-emerald-800/60'
+                          : ''
                       }`}
                     >
-                      <div className="mb-1 flex items-center justify-between">
-                        <label className="text-xs font-black text-slate-700">{f.label}</label>
-                        {f.hint && (
-                          <button
-                            type="button"
-                            onClick={() => speech.speak(`${f.label}. ${f.hint}`)}
-                            className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-700 hover:underline"
-                          >
-                            <Lightbulb size={13} />
-                            <span>Hint</span>
-                          </button>
-                        )}
+                      <div className="mb-1 flex flex-wrap items-center justify-between gap-1.5">
+                        <label className="text-xs font-black text-slate-700 dark:text-slate-200">{f.label}</label>
+                        <div className="flex items-center gap-1.5">
+                          {given && (
+                            <span className="rounded-md bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 text-[10px] font-black text-slate-600 dark:text-slate-400 font-mono">
+                              Given: {given}
+                            </span>
+                          )}
+                          {f.hint && (
+                            <button
+                              type="button"
+                              onClick={() => speech.speak(`${f.label}. ${f.hint}`)}
+                              className="inline-flex items-center gap-1 text-[11px] font-bold text-brand-700 hover:underline cursor-pointer"
+                            >
+                              <Lightbulb size={13} />
+                              <span>Hint</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <input
-                          className="input !py-1.5 !text-sm flex-1"
-                          placeholder={f.placeholder || `Enter ${f.label}`}
-                          value={formVals[k] || ''}
+                          className="input !py-1.5 !text-sm flex-1 font-medium"
+                          placeholder={f.placeholder || `Enter given: ${given || f.label}`}
+                          value={currentVal}
                           disabled={!!result}
                           onChange={(e) => setField(k, e.target.value)}
                         />
+                        {!result && given && (
+                          <button
+                            type="button"
+                            onClick={() => setField(k, given)}
+                            className="btn btn-ghost !py-1.5 !px-2.5 text-xs text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800 hover:bg-brand-50 dark:hover:bg-brand-950 inline-flex items-center gap-1 shrink-0 cursor-pointer"
+                            title="Insert given value into this box"
+                          >
+                            <Copy size={13} />
+                            <span className="hidden sm:inline">Fill</span>
+                          </button>
+                        )}
                         {mic.supported && !result && (
                           <button
                             type="button"
-                            className={`grid h-8 w-8 place-items-center rounded-lg border text-sm transition ${
+                            className={`grid h-8 w-8 place-items-center rounded-lg border text-sm transition shrink-0 cursor-pointer ${
                               isThisFieldListening
                                 ? 'bg-rose-500 text-white animate-pulse'
-                                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200'
+                                : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-700'
                             }`}
                             onClick={() => {
                               if (isThisFieldListening) {
@@ -509,7 +590,9 @@ export default function Quest() {
                         )}
                       </div>
                       {r && !r.ok && (
-                        <p className="mt-1 text-xs font-extrabold text-rose-600">Expected: {r.expected}</p>
+                        <p className="mt-1 text-xs font-extrabold text-rose-600">
+                          Expected given value: {r.expected || given}
+                        </p>
                       )}
                     </div>
                   );

@@ -126,11 +126,12 @@ function gradeTaskOffline(taskId, body) {
       const fields = task.fields || [];
       fieldResults = fields.map((f, idx) => {
         const given = String(vals[idx] || '').trim().toLowerCase();
-        const ok = (f.answer || '')
+        const targetVal = String(f.givenValue || f.answer || '').trim();
+        const ok = targetVal
           .split('|')
           .map((s) => s.trim().toLowerCase())
           .includes(given);
-        return { ok, expected: f.answer };
+        return { ok, expected: targetVal.split('|')[0].trim() };
       });
       correct = fieldResults.every((r) => r.ok);
     } catch {

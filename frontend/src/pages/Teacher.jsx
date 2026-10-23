@@ -602,12 +602,14 @@ function TaskForm({ onSaved, initialClassroomId = '', onGoToClassrooms }) {
 
       {f.type === 'mock_form' && (
         <div className="space-y-3">
-          <p className="font-extrabold text-xs sm:text-sm">Form boxes (put the details learners must copy into the question above)</p>
+          <p className="font-extrabold text-xs sm:text-sm">
+            Form boxes (provide the exact Given Values that learners must enter into each box):
+          </p>
           {f.fields.map((x, i) => (
             <div key={i} className="grid gap-2 rounded-2xl bg-brand-50 dark:bg-slate-900/90 dark:border dark:border-slate-800 p-3 sm:grid-cols-3">
-              <input className="input" placeholder="Box label" value={x.label} onChange={setFld(i, 'label')} />
-              <input className="input" placeholder="Correct value (a|b for alternatives)" value={x.answer} onChange={setFld(i, 'answer')} />
-              <input className="input" placeholder="Hint (read aloud)" value={x.hint} onChange={setFld(i, 'hint')} />
+              <input className="input" placeholder="Box label (e.g. Aadhaar Number)" value={x.label} onChange={setFld(i, 'label')} />
+              <input className="input" placeholder="Given value to enter (e.g. 4920 1839 2049)" value={x.answer} onChange={setFld(i, 'answer')} />
+              <input className="input" placeholder="Hint (optional, read aloud)" value={x.hint} onChange={setFld(i, 'hint')} />
             </div>
           ))}
           <button

@@ -274,6 +274,44 @@ export async function ensureDemoData() {
             'A clear complaint names who you are, which office, what went wrong, and your reference number. That makes it easy to act on.',
         }),
         t({
+          title: 'Link Aadhaar with Bank & PAN',
+          topic: 'Certificates',
+          type: 'mock_form',
+          xp: 20,
+          prompt:
+            'Practice form. You are linking your Aadhaar with your bank and PAN. Use these official given details: Full Name: Ramesh Kumar, 12-digit Aadhaar Number: 4920 1839 2049, PAN Number: ABCDE1234F, Linked Mobile Number: 9876543210. Only these given values must be entered in the respective form boxes.',
+          audioText:
+            'Practice form. You are linking your Aadhaar with your bank and PAN. Use the following official given details. Full Name, Ramesh Kumar. Twelve digit Aadhaar Number, four nine two zero, one eight three nine, two zero four nine. PAN Number, A B C D E one two three four F. Linked Mobile Number, nine eight seven six five four three two one zero. Enter each given value in the boxes below.',
+          fields: [
+            {
+              label: 'Full name as per Aadhaar',
+              answer: 'Ramesh Kumar',
+              hint: 'Enter the exact name printed on your Aadhaar card.',
+              placeholder: 'Ramesh Kumar',
+            },
+            {
+              label: '12-digit Aadhaar Number',
+              answer: '4920 1839 2049|492018392049',
+              hint: 'Enter the 12-digit UIDAI Aadhaar number.',
+              placeholder: '4920 1839 2049',
+            },
+            {
+              label: 'Permanent Account Number (PAN)',
+              answer: 'ABCDE1234F',
+              hint: 'Enter your 10-character alphanumeric PAN.',
+              placeholder: 'ABCDE1234F',
+            },
+            {
+              label: 'Linked Mobile Number',
+              answer: '9876543210',
+              hint: 'Enter the 10-digit mobile number linked for OTP.',
+              placeholder: '9876543210',
+            },
+          ],
+          explanation:
+            'Linking your Aadhaar with your bank account and PAN verifies your identity across government welfare schemes, direct benefit transfers (DBT), and income tax filings. Only verified official inputs must be entered.',
+        }),
+        t({
           title: 'Why certificates matter',
           topic: 'Certificates',
           type: 'essay',
@@ -290,6 +328,56 @@ export async function ensureDemoData() {
       // Apply translations
       for (const [title, translations] of Object.entries(TASK_TR)) {
         await Task.updateOne({ title }, { translations }).catch(() => {});
+      }
+    } else {
+      // Ensure Aadhaar link task exists even on pre-seeded databases
+      const hasAadhaar = await Task.findOne({ title: 'Link Aadhaar with Bank & PAN' });
+      if (!hasAadhaar && teacher && classroom) {
+        const aadhaarTask = await Task.create({
+          assignedDate: today,
+          createdBy: teacher._id,
+          classroom: classroom._id,
+          xp: 20,
+          title: 'Link Aadhaar with Bank & PAN',
+          topic: 'Certificates',
+          type: 'mock_form',
+          prompt:
+            'Practice form. You are linking your Aadhaar with your bank and PAN. Use these official given details: Full Name: Ramesh Kumar, 12-digit Aadhaar Number: 4920 1839 2049, PAN Number: ABCDE1234F, Linked Mobile Number: 9876543210. Only these given values must be entered in the respective form boxes.',
+          audioText:
+            'Practice form. You are linking your Aadhaar with your bank and PAN. Use the following official given details. Full Name, Ramesh Kumar. Twelve digit Aadhaar Number, four nine two zero, one eight three nine, two zero four nine. PAN Number, A B C D E one two three four F. Linked Mobile Number, nine eight seven six five four three two one zero. Enter each given value in the boxes below.',
+          fields: [
+            {
+              label: 'Full name as per Aadhaar',
+              answer: 'Ramesh Kumar',
+              hint: 'Enter the exact name printed on your Aadhaar card.',
+              placeholder: 'Ramesh Kumar',
+            },
+            {
+              label: '12-digit Aadhaar Number',
+              answer: '4920 1839 2049|492018392049',
+              hint: 'Enter the 12-digit UIDAI Aadhaar number.',
+              placeholder: '4920 1839 2049',
+            },
+            {
+              label: 'Permanent Account Number (PAN)',
+              answer: 'ABCDE1234F',
+              hint: 'Enter your 10-character alphanumeric PAN.',
+              placeholder: 'ABCDE1234F',
+            },
+            {
+              label: 'Linked Mobile Number',
+              answer: '9876543210',
+              hint: 'Enter the 10-digit mobile number linked for OTP.',
+              placeholder: '9876543210',
+            },
+          ],
+          explanation:
+            'Linking your Aadhaar with your bank account and PAN verifies your identity across government welfare schemes, direct benefit transfers (DBT), and income tax filings. Only verified official inputs must be entered.',
+        });
+        if (TASK_TR['Link Aadhaar with Bank & PAN']) {
+          await Task.updateOne({ _id: aadhaarTask._id }, { translations: TASK_TR['Link Aadhaar with Bank & PAN'] });
+        }
+        console.log('✅ Aadhaar link mock form task auto-provisioned');
       }
     }
 
